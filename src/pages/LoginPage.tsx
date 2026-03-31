@@ -10,7 +10,7 @@ interface LoginPageProps {
   onLogin: (result: AuthResult) => void;
 }
 
-const ADMIN_CODE = '000000';
+const ADMIN_CODE = 'adminRH';
 
 const SALARIE_CODES: Record<string, string> = {
   "Cuisinier Céline": "482951",
