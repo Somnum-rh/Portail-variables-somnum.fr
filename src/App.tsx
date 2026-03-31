@@ -1,22 +1,17 @@
 import { useState } from 'react';
-import { Salarie } from '@/types';
 import LoginPage from '@/pages/LoginPage';
-import Dashboard from '@/components/Dashboard';
+import AdminDashboard from '@/pages/AdminDashboard';
+import SalarieDashboard from '@/pages/SalarieDashboard';
+
+interface AuthResult {
+  nom: string;
+  isAdmin: boolean;
+}
 
 export default function App() {
-  const [salarie, setSalarie] = useState<Salarie | null>(null);
+  const [auth, setAuth] = useState<AuthResult | null>(null);
 
-  const handleLogin = (s: Salarie) => {
-    setSalarie(s);
-  };
-
-  const handleLogout = () => {
-    setSalarie(null);
-  };
-
-  if (!salarie) {
-    return <LoginPage onLogin={handleLogin} />;
-  }
-
-  return <Dashboard salarie={salarie} onLogout={handleLogout} />;
+  if (!auth) return <LoginPage onLogin={setAuth} />;
+  if (auth.isAdmin) return <AdminDashboard onLogout={() => setAuth(null)} />;
+  return <SalarieDashboard nom={auth.nom} onLogout={() => setAuth(null)} />;
 }

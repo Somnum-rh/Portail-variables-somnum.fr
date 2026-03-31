@@ -1,11 +1,69 @@
 import { useState } from 'react';
-import { findSalarieByCode } from '@/data/employees';
-import { Salarie } from '@/types';
-import { Eye, EyeOff, Lock, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn } from 'lucide-react';
+
+interface AuthResult {
+  nom: string;
+  isAdmin: boolean;
+}
 
 interface LoginPageProps {
-  onLogin: (salarie: Salarie) => void;
+  onLogin: (result: AuthResult) => void;
 }
+
+const ADMIN_CODE = '000000';
+
+const SALARIE_CODES: Record<string, string> = {
+  "Cuisinier Céline": "482951",
+  "Salarié 02": "739204",
+  "Salarié 03": "156873",
+  "Salarié 04": "924017",
+  "Salarié 05": "371485",
+  "Salarié 06": "608342",
+  "Salarié 07": "219756",
+  "Salarié 08": "847293",
+  "Salarié 09": "563018",
+  "Salarié 10": "431679",
+  "Salarié 11": "987025",
+  "Salarié 12": "264803",
+  "Salarié 13": "718946",
+  "Salarié 14": "395271",
+  "Salarié 15": "842630",
+  "Salarié 16": "157489",
+  "Salarié 17": "630247",
+  "Salarié 18": "492815",
+  "Salarié 19": "873561",
+  "Salarié 20": "345098",
+  "Salarié 21": "761234",
+  "Salarié 22": "508976",
+  "Salarié 23": "234817",
+  "Salarié 24": "916053",
+  "Salarié 25": "673481",
+  "Salarié 26": "189327",
+  "Salarié 27": "547902",
+  "Salarié 28": "823465",
+  "Salarié 29": "410793",
+  "Salarié 30": "962148",
+  "Salarié 31": "285730",
+  "Salarié 32": "714896",
+  "Salarié 33": "439025",
+  "Salarié 34": "597384",
+  "Salarié 35": "163749",
+  "Salarié 36": "820416",
+  "Salarié 37": "375892",
+  "Salarié 38": "649203",
+  "Salarié 39": "917530",
+  "Salarié 40": "283647",
+  "Salarié 41": "504918",
+  "Salarié 42": "761385",
+  "Salarié 43": "428071",
+  "Salarié 44": "895364",
+  "Salarié 45": "137926",
+  "Salarié 46": "604851",
+  "Salarié 47": "392748",
+  "Salarié 48": "819043",
+  "Salarié 49": "256739",
+  "Salarié 50": "473862",
+};
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [code, setCode] = useState('');
@@ -14,10 +72,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const salarie = findSalarieByCode(code);
-    if (salarie) {
+    // Code admin
+    if (code === ADMIN_CODE) {
       setError('');
-      onLogin(salarie);
+      onLogin({ nom: 'Administrateur', isAdmin: true });
+      return;
+    }
+    // Code salarié
+    const found = Object.entries(SALARIE_CODES).find(([, c]) => c === code);
+    if (found) {
+      setError('');
+      onLogin({ nom: found[0], isAdmin: false });
     } else {
       setError("Code d'accès incorrect. Veuillez réessayer.");
     }
@@ -51,52 +116,43 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
-            <label className="block text-xs font-semibold text-gray-500 mb-2 tracking-wider">
-              CODE D'ACCÈS
+            <label className="block text-xs font-semibold text-gray-500 mb-2 tracking-wider uppercase">
+              Code d'accès
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type={showCode ? 'text' : 'password'}
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={e => setCode(e.target.value)}
                 placeholder="••••••"
-                className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-gray-700 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 text-sm bg-gray-50"
+                maxLength={6}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base font-mono tracking-widest focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-gray-50 pr-12"
               />
               <button
                 type="button"
-                onClick={() => setShowCode(!showCode)}
+                onClick={() => setShowCode(v => !v)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showCode ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showCode ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
           </div>
 
           {error && (
-            <p className="text-red-500 text-xs mb-3">{error}</p>
+            <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-3 py-2 text-xs text-red-600">
+              {error}
+            </div>
           )}
 
           <button
             type="submit"
-            disabled={!code.trim()}
-            className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: code.trim() ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#9ca3af',
-              color: 'white',
-            }}
+            className="w-full py-3 bg-[#1F4E79] hover:bg-[#163d61] text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all"
           >
-            <LogIn className="w-4 h-4" />
-            Accéder à mon espace
+            <LogIn size={15} />
+            Se connecter
           </button>
         </form>
-
-        <p className="text-center text-gray-400 text-xs mt-4">
-          Votre code personnel vous a été communiqué par le service RH
-        </p>
       </div>
-
-      <p className="text-blue-300/50 text-xs mt-8">© VARIABLES - SOMNUM</p>
     </div>
   );
 }
