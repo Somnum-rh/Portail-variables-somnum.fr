@@ -1,0 +1,206 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+==========================================================================
+【AI HANDOVER NOTE】
+1. DESIGN PHILOSOPHY:
+   - Corporate Professional with French Administrative Elegance: Ce système de design reflète la rigueur et la clarté attendues dans un portail RH d'entreprise française, tout en apportant une modernité visuelle à travers des surfaces glassmorphiques subtiles.
+   - Visual Style: Deep Navy Gradient Foundation + Crisp White Cards. Le fond utilise un gradient bleu marine profond (#0f2557 → #1a3a6e → #0d2040) qui évoque confiance, professionnalisme et stabilité. Les cartes blanches avec border-radius généreux (16-24px) créent des îlots de clarté et de lisibilité maximale.
+   - Rationale: Pour un portail RH où les employés saisissent des données sensibles (congés, frais, primes), la lisibilité et la confiance visuelle sont primordiales. Le contraste élevé blanc/bleu marine garantit une accessibilité WCAG AAA.
+
+2. TYPOGRAPHY:
+   - Sans: Inter a été choisi pour sa neutralité professionnelle, son excellente lisibilité à toutes les tailles, et sa large adoption dans les interfaces d'entreprise modernes. Ses proportions équilibrées conviennent parfaitement aux formulaires et tableaux de données RH.
+   - Mono: JetBrains Mono est utilisé pour les codes d'accès à 6 chiffres, les montants en euros, et les compteurs d'heures. Sa clarté numérique réduit les erreurs de saisie.
+
+3. COLOR SYSTEM:
+   - Brand Primary: Bleu corporate #1F4E79 (oklch(0.38 0.08 250)) - un bleu professionnel qui évoque autorité et fiabilité, typique des environnements RH français. Ce bleu est suffisamment saturé pour être distinctif sans être agressif.
+   - Color Mapping: --brand → --primary (boutons d'action), --accent (états hover/focus), --ring (focus rings). Le bleu marine du fond (--background: oklch(0.12 0.06 250)) crée une hiérarchie visuelle claire avec les cartes blanches.
+   - Semantic Colors: --success (vert comptable pour validations), --warning (orange pour alertes de saisie), --destructive (rouge sobre pour suppressions). Tous calibrés pour maintenir lisibilité sur fond bleu marine.
+   - Sidebar: Utilise une variation plus claire du bleu marine (oklch(0.16 0.06 250)) pour créer une distinction subtile tout en maintenant la cohérence chromatique.
+
+4. USAGE GUIDE:
+   - Layout: Dashboard full-width avec sidebar fixe. Les cards utilisent backdrop-blur(8px) avec opacity 0.98 pour un effet de profondeur subtil sur le gradient bleu.
+   - Effects: Rim-light blanc (1px) sur les cards pour accentuer la séparation du fond. Hover states avec transition douce (200ms) sur les boutons. Accordéons avec animation d'expansion fluide (framer-motion).
+   - Form Design: Inputs avec border bleu clair au repos, --ring bleu primary au focus. Labels en semi-bold pour clarté. Validation inline avec icônes success/error.
+   - Accessibility: Tous les textes sur fond bleu marine sont en blanc pur (oklch(0.99 0 0)) pour garantir ratio de contraste > 12:1. Focus indicators épais (3px) pour navigation clavier.
+   - French Localization: Tous les labels, placeholders et messages d'erreur doivent être en français. Format monétaire: '€' après le nombre avec espace insécable.
+==========================================================================
+*/
+
+:root {
+  /* Typography */
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-mono: JetBrains Mono, Consolas, monospace;
+  
+  /* Radius */
+  --radius: 1rem;
+
+  /* Core UI Tokens */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.12 0.06 250);
+  --card: oklch(0.99 0 0);
+  --card-foreground: oklch(0.12 0.06 250);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: oklch(0.12 0.06 250);
+  --primary: oklch(0.38 0.08 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.92 0.02 250);
+  --secondary-foreground: oklch(0.12 0.06 250);
+  --muted: oklch(0.95 0.01 250);
+  --muted-foreground: oklch(0.45 0.04 250);
+  --accent: oklch(0.42 0.09 250);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.55 0.22 15);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.88 0.02 250);
+  --input: oklch(0.88 0.02 250);
+  --ring: oklch(0.38 0.08 250);
+  
+  /* Chart Tokens */
+  --chart-1: oklch(0.38 0.08 250);
+  --chart-2: oklch(0.55 0.12 200);
+  --chart-3: oklch(0.62 0.15 150);
+  --chart-4: oklch(0.68 0.10 280);
+  --chart-5: oklch(0.58 0.18 320);
+  
+  /* Sidebar Tokens */
+  --sidebar: oklch(0.16 0.06 250);
+  --sidebar-foreground: oklch(0.92 0.02 250);
+  --sidebar-primary: oklch(0.42 0.09 250);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.22 0.07 250);
+  --sidebar-accent-foreground: oklch(0.95 0.01 250);
+  --sidebar-border: oklch(0.24 0.06 250);
+  --sidebar-ring: oklch(0.42 0.09 250);
+}
+
+.dark {
+  --background: oklch(0.12 0.06 250);
+  --foreground: oklch(0.99 0 0);
+  --card: oklch(0.16 0.06 250);
+  --card-foreground: oklch(0.95 0.01 250);
+  --popover: oklch(0.14 0.06 250);
+  --popover-foreground: oklch(0.95 0.01 250);
+  --primary: oklch(0.55 0.12 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.22 0.07 250);
+  --secondary-foreground: oklch(0.92 0.02 250);
+  --muted: oklch(0.18 0.06 250);
+  --muted-foreground: oklch(0.65 0.04 250);
+  --accent: oklch(0.48 0.11 250);
+  --accent-foreground: oklch(0.99 0 0);
+  --destructive: oklch(0.62 0.24 18);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.24 0.06 250);
+  --input: oklch(0.24 0.06 250);
+  --ring: oklch(0.55 0.12 250);
+  
+  /* Chart Tokens */
+  --chart-1: oklch(0.55 0.12 250);
+  --chart-2: oklch(0.62 0.15 200);
+  --chart-3: oklch(0.68 0.18 150);
+  --chart-4: oklch(0.72 0.12 280);
+  --chart-5: oklch(0.65 0.20 320);
+  
+  /* Sidebar Tokens */
+  --sidebar: oklch(0.10 0.06 250);
+  --sidebar-foreground: oklch(0.88 0.02 250);
+  --sidebar-primary: oklch(0.52 0.11 250);
+  --sidebar-primary-foreground: oklch(0.99 0 0);
+  --sidebar-accent: oklch(0.20 0.07 250);
+  --sidebar-accent-foreground: oklch(0.92 0.02 250);
+  --sidebar-border: oklch(0.18 0.06 250);
+  --sidebar-ring: oklch(0.52 0.11 250);
+}
+
+@theme inline {
+  /* Shadcn Core Mapping */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Charts Mapping */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar Mapping */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Typography */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Radius */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans min-h-screen;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  code, pre {
+    @apply font-mono;
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-primary;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/40;
+  }
+}
