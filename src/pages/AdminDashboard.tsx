@@ -12,6 +12,8 @@ interface RhRow {
   frais_pro: string;
   regule: string;
   primes: string;
+  heures_sup?: string;
+  heures_abs?: string;
 }
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -50,6 +52,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [realtime, setRealtime] = useState(false);
   const [showCodes, setShowCodes] = useState<Record<string,boolean>>({});
+  // Compteur d'heures : { [salarie_mois]: { heures_sup, heures_abs } }
+  const [heuresEdit, setHeuresEdit] = useState<Record<string,{heures_sup:string,heures_abs:string}>>({});
+  const [heuresSaving, setHeuresSaving] = useState<Record<string,boolean>>({});
+  const [heuresSaved, setHeuresSaved] = useState<Record<string,boolean>>({});
 
   const fetchData = async () => {
     try {
@@ -57,7 +63,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         .from('rh_data')
         .select('*')
         .neq('mois', '__heures__');
-      if (!error && rows) setData(rows as RhRow[]);
+      if (!error && rows) {
+        setData(rows as RhRow[]);
+        // Initialise heuresEdit depuis les données
+        const init: Record<string,{heures_sup:string,heures_abs:string}> = {};
+        (rows as RhRow[]).forEach(r => {
+          const key = `${r.salarie_key}__${r.mois}`;
+          init[key] = { heures_sup: r.heures_sup || '', heures_abs: r.heures_abs || '' };
+        });
+        setHeuresEdit(prev => ({ ...init, ...prev }));
+      }
     } catch {}
     setLoading(false);
   };
@@ -223,35 +238,81 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
             )}
 
-            {/* COMPTEURS */}
+            {/* COMPTEURS — saisie admin */}
             {tab === 'compteurs' && (
-              <div className="p-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {SALARIES.map(sal => {
-                    const rows = data.filter(r => r.salarie_key === sal);
-                    const totalConges = rows.reduce((s,r) => s + parseFloat(r.conges||'0'), 0);
-                    const totalMaladie = rows.reduce((s,r) => s + parseFloat(r.maladie||'0'), 0);
-                    return (
-                      <div key={sal} className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-                        <p className="text-xs font-semibold text-[#1F4E79] mb-2 truncate">{sal}</p>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Congés</span>
-                            <span className="font-medium text-gray-700">{totalConges || '-'}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Maladie</span>
-                            <span className="font-medium text-gray-700">{totalMaladie || '-'}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-gray-500">Mois saisis</span>
-                            <span className="font-medium text-blue-600">{rows.length}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+              <div className="p-4 space-y-4">
+                <p className="text-xs text-gray-500 mb-2">Saisissez les heures pour chaque salarié et chaque mois. Ces valeurs seront visibles en lecture seule sur l'espace salarié.</p>
+                {SALARIES.map(sal => (
+                  <div key={sal} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="bg-[#1F4E79]/5 px-4 py-2 border-b border-gray-100">
+                      <p className="text-xs font-semibold text-[#1F4E79]">{sal}</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-50">
+                            <th className="text-left px-3 py-2 font-medium text-gray-500">Mois</th>
+                            <th className="px-3 py-2 font-medium text-gray-500">Heures sup.</th>
+                            <th className="px-3 py-2 font-medium text-gray-500">Heures abs.</th>
+                            <th className="px-3 py-2"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {MOIS.map(mois => {
+                            const key = `${sal}__${mois}`;
+                            const h = heuresEdit[key] || { heures_sup: '', heures_abs: '' };
+                            const saving = heuresSaving[key];
+                            const saved = heuresSaved[key];
+                            const saveHeures = async () => {
+                              setHeuresSaving(prev => ({ ...prev, [key]: true }));
+                              try {
+                                await supabase.from('rh_data').upsert(
+                                  { salarie_key: sal, mois, heures_sup: h.heures_sup, heures_abs: h.heures_abs },
+                                  { onConflict: 'salarie_key,mois' }
+                                );
+                                setHeuresSaved(prev => ({ ...prev, [key]: true }));
+                                setTimeout(() => setHeuresSaved(prev => ({ ...prev, [key]: false })), 2000);
+                              } catch {}
+                              setHeuresSaving(prev => ({ ...prev, [key]: false }));
+                            };
+                            return (
+                              <tr key={mois} className="border-t border-gray-50">
+                                <td className="px-3 py-2 text-gray-600 font-medium">{mois}</td>
+                                <td className="px-3 py-1.5">
+                                  <input
+                                    type="text"
+                                    value={h.heures_sup}
+                                    onChange={e => setHeuresEdit(prev => ({ ...prev, [key]: { ...h, heures_sup: e.target.value } }))}
+                                    placeholder="0.00"
+                                    className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#1F4E79] bg-gray-50"
+                                  />
+                                </td>
+                                <td className="px-3 py-1.5">
+                                  <input
+                                    type="text"
+                                    value={h.heures_abs}
+                                    onChange={e => setHeuresEdit(prev => ({ ...prev, [key]: { ...h, heures_abs: e.target.value } }))}
+                                    placeholder="0.00"
+                                    className="w-20 px-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-[#1F4E79] bg-gray-50"
+                                  />
+                                </td>
+                                <td className="px-3 py-1.5">
+                                  <button
+                                    onClick={saveHeures}
+                                    disabled={saving}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${saved ? 'bg-green-500 text-white' : 'bg-[#1F4E79] text-white hover:bg-[#163d61]'} disabled:opacity-50`}
+                                  >
+                                    {saved ? '✓' : saving ? '…' : 'OK'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

@@ -169,32 +169,25 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
                   ) : (
                     <div className="pt-4 space-y-3">
 
-                      {/* Compteur d'heures */}
+                      {/* Compteur d'heures — lecture seule (saisi par l'admin) */}
                       <div className="bg-blue-50 rounded-xl p-3 mb-2 border border-blue-100">
                         <div className="flex items-center gap-2 mb-2">
                           <Clock size={14} className="text-[#1F4E79]" />
                           <span className="text-xs font-semibold text-[#1F4E79] uppercase tracking-wide">Compteur d'heures</span>
+                          <span className="text-xs text-blue-400 ml-auto italic">Saisi par l'administration</span>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                           <div>
                             <label className={lbl}>Heures supplémentaires</label>
-                            <input
-                              type="text"
-                              value={d.heures_sup}
-                              onChange={e => handleChange(mois, 'heures_sup', e.target.value)}
-                              placeholder="0.00"
-                              className={inp}
-                            />
+                            <div className="w-full px-3 py-2.5 bg-white border border-blue-200 rounded-xl text-sm text-gray-700 font-medium">
+                              {d.heures_sup || <span className="text-gray-400">—</span>}
+                            </div>
                           </div>
                           <div>
                             <label className={lbl}>Heures d'absence</label>
-                            <input
-                              type="text"
-                              value={d.heures_abs}
-                              onChange={e => handleChange(mois, 'heures_abs', e.target.value)}
-                              placeholder="0.00"
-                              className={inp}
-                            />
+                            <div className="w-full px-3 py-2.5 bg-white border border-blue-200 rounded-xl text-sm text-gray-700 font-medium">
+                              {d.heures_abs || <span className="text-gray-400">—</span>}
+                            </div>
                           </div>
                         </div>
                       </div>
