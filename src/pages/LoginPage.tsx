@@ -125,7 +125,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 value={code}
                 onChange={e => setCode(e.target.value)}
                 placeholder="••••••"
-                maxLength={6}
+                maxLength={50}
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base font-mono tracking-widest focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 bg-gray-50 pr-12"
               />
               <button
