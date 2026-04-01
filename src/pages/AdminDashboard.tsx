@@ -38,7 +38,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const fetchData = async () => {
     try {
-      const { data: rows, error } = await supabase.from('rh_data').select('*').neq('mois','__heures__');
+      const { data: rows, error } = await supabase.from('rh_data').select('*').neq('mois','__heures__').neq('mois','__notes__');
       if (error) { setDbOk(false); setLoading(false); return; }
       setDbOk(true);
       if (rows) setData(rows as RhRow[]);
