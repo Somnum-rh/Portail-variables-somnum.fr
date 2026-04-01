@@ -35,22 +35,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [savedAll, setSavedAll] = useState(false);
   const [selectedSal, setSelectedSal] = useState<string|null>(null);
   const [dynCodes, setDynCodes] = useState<Record<string,string>>(SALARIE_CODES);
+  const [dynSocietes, setDynSocietes] = useState<Record<string,string>>({});
   const [newNom, setNewNom] = useState('');
   const [newCode, setNewCode] = useState('');
+  const [newSociete, setNewSociete] = useState('');
   const [addingCollab, setAddingCollab] = useState(false);
   const [addMsg, setAddMsg] = useState('');
   const [deletingCollab, setDeletingCollab] = useState<string|null>(null);
   const [copiedCode, setCopiedCode] = useState<string|null>(null);
+  const [filterSociete, setFilterSociete] = useState<string|null>(null);
   const [dbOk, setDbOk] = useState<boolean|null>(null);
   const [allNotes, setAllNotes] = useState<Record<string,string>>({});
 
   const fetchCodes = async () => {
     try {
-      const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code');
+      const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code, societe');
       if (rows && rows.length > 0) {
         const m: Record<string,string> = { ...DEFAULT_CODES };
-        rows.forEach((r:any) => { m[r.salarie_key] = r.code; });
+        const s: Record<string,string> = {};
+        rows.forEach((r:any) => { m[r.salarie_key] = r.code; if (r.societe) s[r.salarie_key] = r.societe; });
         setDynCodes(m);
+        setDynSocietes(s);
       }
     } catch {}
   };
@@ -105,12 +110,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const addCollab = async () => {
     const nom = newNom.trim();
     const code = newCode.trim() || genCode();
+    const soc = newSociete.trim();
     if (!nom) return;
     setAddingCollab(true);
     try {
-      await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' });
+      await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe: soc || null }, { onConflict: 'salarie_key' });
       setDynCodes(prev => ({ ...prev, [nom]: code }));
-      setNewNom(''); setNewCode('');
+      setDynSocietes(prev => soc ? { ...prev, [nom]: soc } : prev);
+      setNewNom(''); setNewCode(''); setNewSociete('');
       setAddMsg(`✓ ${nom} ajouté avec le code ${code}`);
       setTimeout(() => setAddMsg(''), 3500);
     } catch {}
@@ -162,6 +169,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     {id:'notes' as Tab,label:'💬 Notes'},
   ];
 
+  const societes = [...new Set(Object.values(dynSocietes).filter(Boolean))].sort();
+  const filteredSalaries = filterSociete
+    ? SALARIES_DYN.filter(s => dynSocietes[s] === filterSociete)
+    : SALARIES_DYN;
+
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
       <div className="bg-gradient-to-r from-[#1F4E79] to-[#2e75b6] text-white px-4 py-4 shadow-lg">
@@ -170,7 +182,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <p className="text-blue-200 text-xs font-medium uppercase tracking-wide">Administration</p>
             <h1 className="text-lg font-bold mt-0.5 flex items-center gap-2"><Users size={16}/> VARIABLES - SOMNUM</h1>
             <p className="text-blue-300 text-xs">
-              {loading?'Chargement…':`${filledCount} / ${SALARIES_DYN.length} salariés ont saisi des données`}
+              {loading?'Chargement…':filterSociete?`${filteredSalaries.length} salariés — ${filterSociete}`:`${filledCount} / ${SALARIES_DYN.length} salariés ont saisi des données`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -216,6 +228,22 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             {/* SYNTHÈSE */}
             {tab==='synthese'&&(
               <div>
+                {/* Filtre société */}
+                <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm flex-wrap mb-4">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide shrink-0">Société :</span>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={()=>setFilterSociete(null)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterSociete===null?'bg-[#1F4E79] text-white':'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                      Toutes
+                    </button>
+                    {societes.map(s=>(
+                      <button key={s} onClick={()=>setFilterSociete(s)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterSociete===s?'bg-[#1F4E79] text-white':'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Totaux globaux</p>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 mb-6">
                   {FIELDS.map(f=>(
@@ -226,7 +254,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Récapitulatif ({SALARIES_DYN.length} salariés)</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Récapitulatif ({filteredSalaries.length} salariés{filterSociete ? ` — ${filterSociete}` : ''})</p>
                 <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -236,7 +264,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {SALARIES_DYN.map((sal,i)=>(
+                      {filteredSalaries.map((sal,i)=>(
                         <tr key={sal} className={i%2===0?'bg-white':'bg-blue-50/30'}>
                           <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{sal}</td>
                           {MOIS.map(mois=>{
@@ -358,6 +386,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] font-mono"/>
                     </div>
                   </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Société</label>
+                      <input type="text" value={newSociete} onChange={e=>setNewSociete(e.target.value)} placeholder="Ex: SOMNUM"
+                        className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79]"/>
+                    </div>
+                  </div>
                   <div className="flex items-center gap-3">
                     <button onClick={addCollab} disabled={!newNom.trim()||addingCollab}
                       className="flex items-center gap-2 px-5 py-2.5 bg-[#1F4E79] hover:bg-[#163d61] text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50">
@@ -375,6 +410,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <div key={sal} className="bg-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
                         <button onClick={()=>setSelectedSal(sal)} className="flex-1 text-left">
                           <span className="font-medium text-gray-700 text-sm">{sal}</span>
+                          {dynSocietes[sal] && <p className="text-xs text-gray-400 mt-0.5">{dynSocietes[sal]}</p>}
                         </button>
                         <div className="flex items-center gap-1.5">
                           <span className="text-xs bg-[#1F4E79]/10 text-[#1F4E79] px-2 py-1 rounded-lg font-mono">{dynCodes[sal]}</span>
