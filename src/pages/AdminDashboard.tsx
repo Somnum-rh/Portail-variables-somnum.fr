@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy } from 'lucide-react';
+import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy, Pencil, Check, X } from 'lucide-react';
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -46,6 +46,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [filterSociete, setFilterSociete] = useState<string|null>(null);
   const [dbOk, setDbOk] = useState<boolean|null>(null);
   const [allNotes, setAllNotes] = useState<Record<string,string>>({});
+
+  // États édition inline
+  const [editingCollab, setEditingCollab] = useState<string|null>(null);
+  const [editNom, setEditNom] = useState('');
+  const [editCode, setEditCode] = useState('');
+  const [editSociete, setEditSociete] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchCodes = async () => {
     try {
@@ -106,6 +113,44 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const SALARIES_DYN = Object.keys(dynCodes);
 
   const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+  const startEdit = (sal: string) => {
+    setEditingCollab(sal);
+    setEditNom(sal);
+    setEditCode(dynCodes[sal] || '');
+    setEditSociete(dynSocietes[sal] || '');
+  };
+
+  const saveEdit = async (oldSal: string) => {
+    const nom = editNom.trim();
+    const code = editCode.trim() || genCode();
+    const societe = editSociete.trim();
+    if (!nom) return;
+    setSavingEdit(true);
+    try {
+      // Si le nom a changé : supprimer l'ancien, insérer le nouveau
+      if (nom !== oldSal) {
+        await supabase.from('rh_codes').delete().eq('salarie_key', oldSal);
+        await supabase.from('rh_data').update({ salarie_key: nom }).eq('salarie_key', oldSal);
+      }
+      await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe }, { onConflict: 'salarie_key' });
+      // Mettre à jour l'état local
+      setDynCodes(prev => {
+        const n = { ...prev };
+        if (nom !== oldSal) delete n[oldSal];
+        n[nom] = code;
+        return n;
+      });
+      setDynSocietes(prev => {
+        const n = { ...prev };
+        if (nom !== oldSal) delete n[oldSal];
+        n[nom] = societe;
+        return n;
+      });
+      setEditingCollab(null);
+    } catch {}
+    setSavingEdit(false);
+  };
 
   const addCollab = async () => {
     const nom = newNom.trim();
@@ -407,22 +452,56 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 {selectedSal===null?(
                   <div className="grid gap-2 sm:grid-cols-2">
                     {SALARIES_DYN.map(sal=>(
-                      <div key={sal} className="bg-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
-                        <button onClick={()=>setSelectedSal(sal)} className="flex-1 text-left">
-                          <span className="font-medium text-gray-700 text-sm">{sal}</span>
-                          {dynSocietes[sal] && <p className="text-xs text-gray-400 mt-0.5">{dynSocietes[sal]}</p>}
-                        </button>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs bg-[#1F4E79]/10 text-[#1F4E79] px-2 py-1 rounded-lg font-mono">{dynCodes[sal]}</span>
-                          <button onClick={()=>copyCode(dynCodes[sal],sal)} title="Copier"
-                            className={`p-1.5 rounded-lg transition-all ${copiedCode===sal?'bg-green-100 text-green-600':'text-gray-400 hover:bg-gray-100'}`}>
-                            <Copy size={12}/>
-                          </button>
-                          <button onClick={()=>deleteCollab(sal)} disabled={deletingCollab===sal} title="Supprimer"
-                            className="p-1.5 rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all disabled:opacity-50">
-                            {deletingCollab===sal?<span className="w-3 h-3 border-2 border-red-300 border-t-red-500 rounded-full animate-spin block"/>:<Trash2 size={12}/>}
-                          </button>
-                        </div>
+                      <div key={sal} className="bg-white rounded-2xl px-4 py-3 shadow-sm hover:shadow-md transition-all">
+                        {editingCollab === sal ? (
+                          /* MODE ÉDITION */
+                          <div className="space-y-2">
+                            <input type="text" value={editNom} onChange={e=>setEditNom(e.target.value)}
+                              placeholder="Nom complet"
+                              className="w-full px-3 py-2 bg-[#f0f4fa] border border-[#1F4E79] rounded-xl text-sm focus:outline-none font-medium"/>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input type="text" value={editCode} onChange={e=>setEditCode(e.target.value)}
+                                placeholder="Code accès"
+                                className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none font-mono"/>
+                              <input type="text" value={editSociete} onChange={e=>setEditSociete(e.target.value)}
+                                placeholder="Société"
+                                className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none"/>
+                            </div>
+                            <div className="flex items-center gap-2 pt-1">
+                              <button onClick={()=>saveEdit(sal)} disabled={savingEdit}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-[#1F4E79] text-white rounded-xl text-xs font-semibold hover:bg-[#163d61] transition-all disabled:opacity-50">
+                                <Check size={12}/>{savingEdit?'…':'Enregistrer'}
+                              </button>
+                              <button onClick={()=>setEditingCollab(null)}
+                                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-200 transition-all">
+                                <X size={12}/>Annuler
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* MODE LECTURE */
+                          <div className="flex items-center justify-between">
+                            <button onClick={()=>setSelectedSal(sal)} className="flex-1 text-left min-w-0">
+                              <span className="font-medium text-gray-700 text-sm block truncate">{sal}</span>
+                              {dynSocietes[sal] && <span className="text-xs text-gray-400">{dynSocietes[sal]}</span>}
+                            </button>
+                            <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                              <span className="text-xs bg-[#1F4E79]/10 text-[#1F4E79] px-2 py-1 rounded-lg font-mono">{dynCodes[sal]}</span>
+                              <button onClick={()=>copyCode(dynCodes[sal], sal)} title="Copier"
+                                className={`p-1.5 rounded-lg transition-all ${copiedCode===sal?'bg-green-100 text-green-600':'text-gray-400 hover:bg-gray-100'}`}>
+                                <Copy size={12}/>
+                              </button>
+                              <button onClick={()=>startEdit(sal)} title="Modifier"
+                                className="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-[#1F4E79] transition-all">
+                                <Pencil size={12}/>
+                              </button>
+                              <button onClick={()=>deleteCollab(sal)} disabled={deletingCollab===sal} title="Supprimer"
+                                className="p-1.5 rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all disabled:opacity-50">
+                                {deletingCollab===sal?<span className="w-3 h-3 border-2 border-red-300 border-t-red-500 rounded-full animate-spin block"/>:<Trash2 size={12}/>}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -442,8 +521,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         </button>
                       </div>
                     </div>
+                    {dynSocietes[selectedSal] && (
+                      <div className="bg-[#f0f4fa] rounded-xl px-4 py-3 flex items-center justify-between mt-2">
+                        <span className="text-xs text-gray-500 font-medium">Société</span>
+                        <span className="font-medium text-gray-700 text-sm">{dynSocietes[selectedSal]}</span>
+                      </div>
+                    )}
+                    <button onClick={()=>{ setSelectedSal(null); startEdit(selectedSal); }}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-[#1F4E79] hover:bg-blue-50 transition-all">
+                      <Pencil size={12}/>Modifier les informations
+                    </button>
                     <button onClick={()=>deleteCollab(selectedSal)} disabled={deletingCollab===selectedSal}
-                      className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-50 transition-all disabled:opacity-50">
+                      className="mt-2 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-50 transition-all disabled:opacity-50">
                       <Trash2 size={12}/>Supprimer ce collaborateur
                     </button>
                   </div>
