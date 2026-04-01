@@ -1,225 +1,166 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { LogOut, Clock, ChevronDown, ChevronUp, Save, CheckCircle } from 'lucide-react';
+import { LogOut, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 
-interface SalarieDashboardProps {
-  nom: string;
-  onLogout: () => void;
-}
-
+interface SalarieDashboardProps { nom: string; onLogout: () => void; }
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-
-interface VarsData {
-  conges: string;
-  maladie: string;
-  transport: string;
-  ndf: string;       // KM
-  frais_pro: string;
-  regule: string;
-  primes: string;
-}
-
-const EMPTY: VarsData = { conges:'', maladie:'', transport:'', ndf:'', frais_pro:'', regule:'', primes:'' };
-
-interface MoisState {
-  data: VarsData;
-  saving: boolean;
-  saved: boolean;
-  loading: boolean;
-}
+interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; }
+const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'' };
+const FIELDS: {key:keyof VarsData;label:string;unit:string;color:string;bg:string}[] = [
+  {key:'conges',label:'Congés',unit:'j',color:'text-blue-600',bg:'bg-blue-100'},
+  {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-600',bg:'bg-orange-100'},
+  {key:'transport',label:'Transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
+  {key:'ndf',label:'KM',unit:'€',color:'text-cyan-600',bg:'bg-cyan-100'},
+  {key:'frais_pro',label:'Frais pro',unit:'',color:'text-purple-600',bg:'bg-purple-100'},
+  {key:'regule',label:'Régul avance',unit:'',color:'text-pink-600',bg:'bg-pink-100'},
+  {key:'primes',label:'Primes',unit:'€',color:'text-emerald-600',bg:'bg-emerald-100'},
+];
 
 export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProps) {
   const [heures, setHeures] = useState(0);
-  const [openMois, setOpenMois] = useState<string>(MOIS[new Date().getMonth()]);
-  const [moisStates, setMoisStates] = useState<Record<string, MoisState>>(
-    () => Object.fromEntries(MOIS.map(m => [m, { data: { ...EMPTY }, saving: false, saved: false, loading: false }]))
-  );
-  const [totaux, setTotaux] = useState<VarsData>({ ...EMPTY });
+  const [loading, setLoading] = useState(true);
+  const [openMois, setOpenMois] = useState(MOIS[new Date().getMonth()]);
+  const [allData, setAllData] = useState<Record<string,VarsData>>({});
+  const [saving, setSaving] = useState<Record<string,boolean>>({});
+  const [saved, setSaved] = useState<Record<string,boolean>>({});
 
-  // Charger compteur heures
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('rh_data').select('ndf').eq('salarie_key', nom).eq('mois', '__heures__').maybeSingle();
-      if (data) setHeures(parseFloat(data.ndf) || 0);
+      const [{ data: hData }, { data: rows }] = await Promise.all([
+        supabase.from('rh_data').select('ndf').eq('salarie_key',nom).eq('mois','__heures__').maybeSingle(),
+        supabase.from('rh_data').select('*').eq('salarie_key',nom).neq('mois','__heures__'),
+      ]);
+      if (hData) setHeures(parseFloat(hData.ndf)||0);
+      if (rows) {
+        const d: Record<string,VarsData> = {};
+        rows.forEach((r:any) => { d[r.mois] = {conges:r.conges||'',maladie:r.maladie||'',transport:r.transport||'',ndf:r.ndf||'',frais_pro:r.frais_pro||'',regule:r.regule||'',primes:r.primes||''}; });
+        setAllData(d);
+      }
+      setLoading(false);
     })();
-    // Realtime heures
-    const ch = supabase.channel('rh_data_heures')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rh_data' }, (payload: any) => {
-        const r = payload.new ?? payload.old;
-        if (r?.mois === '__heures__' && r?.salarie_key === nom) setHeures(parseFloat(r.ndf) || 0);
+    const ch = supabase.channel('rh_sal_'+nom)
+      .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},(p:any)=>{
+        const r=p.new??p.old; if(!r||r.salarie_key!==nom) return;
+        if(r.mois==='__heures__') setHeures(parseFloat(r.ndf)||0);
       }).subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [nom]);
+  },[nom]);
 
-  // Charger toutes les données pour les totaux
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase.from('rh_data').select('*').eq('salarie_key', nom).neq('mois', '__heures__');
-      if (data && data.length > 0) {
-        const tot: VarsData = { ...EMPTY };
-        data.forEach((r: any) => {
-          (['conges','maladie','transport','ndf','frais_pro','regule','primes'] as (keyof VarsData)[]).forEach(k => {
-            const v = parseFloat(r[k] || '0');
-            if (v) tot[k] = String((parseFloat(tot[k]||'0') + v).toFixed(2));
-          });
-        });
-        setTotaux(tot);
-        // Init moisStates avec les données
-        const newStates: Record<string, MoisState> = Object.fromEntries(MOIS.map(m => [m, { data: { ...EMPTY }, saving: false, saved: false, loading: false }]));
-        data.forEach((r: any) => {
-          if (newStates[r.mois]) {
-            newStates[r.mois].data = { conges: r.conges||'', maladie: r.maladie||'', transport: r.transport||'', ndf: r.ndf||'', frais_pro: r.frais_pro||'', regule: r.regule||'', primes: r.primes||'' };
-          }
-        });
-        setMoisStates(newStates);
-      }
-    })();
-  }, [nom]);
-
-  // Charger un mois spécifique à l'ouverture
-  const handleToggle = async (mois: string) => {
-    if (openMois === mois) { setOpenMois(''); return; }
-    setOpenMois(mois);
-    setMoisStates(prev => ({ ...prev, [mois]: { ...prev[mois], loading: true } }));
-    const { data } = await supabase.from('rh_data').select('*').eq('salarie_key', nom).eq('mois', mois).maybeSingle();
-    setMoisStates(prev => ({
-      ...prev,
-      [mois]: {
-        ...prev[mois],
-        loading: false,
-        data: data ? { conges: data.conges||'', maladie: data.maladie||'', transport: data.transport||'', ndf: data.ndf||'', frais_pro: data.frais_pro||'', regule: data.regule||'', primes: data.primes||'' } : { ...EMPTY }
-      }
-    }));
+  const getData = (mois:string): VarsData => allData[mois]??{...EMPTY};
+  const setField = (mois:string, key:keyof VarsData, val:string) => {
+    setAllData(prev=>({...prev,[mois]:{...getData(mois),[key]:val}}));
+  };
+  const handleSave = async (mois:string) => {
+    setSaving(p=>({...p,[mois]:true}));
+    await supabase.from('rh_data').upsert({salarie_key:nom,mois,...getData(mois)},{onConflict:'salarie_key,mois'});
+    setSaving(p=>({...p,[mois]:false})); setSaved(p=>({...p,[mois]:true}));
+    setTimeout(()=>setSaved(p=>({...p,[mois]:false})),2000);
   };
 
-  const handleChange = (mois: string, key: keyof VarsData, value: string) => {
-    setMoisStates(prev => ({ ...prev, [mois]: { ...prev[mois], data: { ...prev[mois].data, [key]: value } } }));
-  };
+  const totaux = FIELDS.reduce((acc,f)=>{
+    acc[f.key]=String(Object.values(allData).reduce((s,d)=>s+(parseFloat(d[f.key]||'0')),0)||0);
+    return acc;
+  },{} as VarsData);
 
-  const handleSave = async (mois: string) => {
-    setMoisStates(prev => ({ ...prev, [mois]: { ...prev[mois], saving: true } }));
-    const vars = moisStates[mois].data;
-    await supabase.from('rh_data').upsert({ salarie_key: nom, mois, ...vars }, { onConflict: 'salarie_key,mois' });
-    setMoisStates(prev => ({ ...prev, [mois]: { ...prev[mois], saving: false, saved: true } }));
-    setTimeout(() => setMoisStates(prev => ({ ...prev, [mois]: { ...prev[mois], saved: false } })), 2000);
-  };
-
-  const inp = "w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] focus:ring-2 focus:ring-[#1F4E79]/10 placeholder-gray-400";
-  const lbl = "block text-xs font-medium text-gray-500 mb-1";
-
-  const totCards = [
-    { key: 'conges' as keyof VarsData, label: 'Congés', unit: 'j', bg: 'bg-blue-100', color: 'text-blue-600' },
-    { key: 'maladie' as keyof VarsData, label: 'Maladie', unit: 'j', bg: 'bg-orange-100', color: 'text-orange-600' },
-    { key: 'transport' as keyof VarsData, label: 'Transport', unit: '€', bg: 'bg-green-100', color: 'text-green-600' },
-    { key: 'ndf' as keyof VarsData, label: 'KM', unit: '€', bg: 'bg-cyan-100', color: 'text-cyan-600' },
-    { key: 'frais_pro' as keyof VarsData, label: 'Frais pro', unit: '', bg: 'bg-purple-100', color: 'text-purple-600' },
-    { key: 'regule' as keyof VarsData, label: 'Régul avance', unit: '', bg: 'bg-pink-100', color: 'text-pink-600' },
-    { key: 'primes' as keyof VarsData, label: 'Primes', unit: '€', bg: 'bg-emerald-100', color: 'text-emerald-600' },
-  ];
+  if(loading) return (
+    <div className="min-h-screen bg-[#f0f4fa] flex flex-col items-center justify-center gap-4">
+      <div className="w-10 h-10 border-4 border-[#1F4E79]/20 border-t-[#1F4E79] rounded-full animate-spin"/>
+      <p className="text-sm text-gray-500">Chargement de vos données…</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[#1F4E79] to-[#2e75b6] text-white px-4 py-5">
+      <div className="bg-[#1F4E79] text-white px-4 py-4 shadow-lg">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <p className="text-blue-200 text-xs font-semibold uppercase tracking-widest mb-0.5">Espace Salarié</p>
-            <h1 className="text-2xl font-bold">{nom}</h1>
-            <p className="text-blue-300 text-sm">Espace personnel</p>
+            <p className="text-blue-200 text-xs font-medium uppercase tracking-wide">Espace salarié</p>
+            <p className="text-lg font-bold mt-0.5">{nom}</p>
+            <p className="text-blue-300 text-xs">Espace personnel</p>
           </div>
-          <button onClick={onLogout} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all">
-            <LogOut size={18} />
+          <button onClick={onLogout} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2 text-sm font-medium transition-all">
+            <LogOut size={14}/><span className="hidden sm:inline">Déconnexion</span>
           </button>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 pt-5 pb-10 space-y-5">
+      <div className="max-w-2xl mx-auto px-4 pt-5">
         {/* Compteur d'heures */}
-        <div className="bg-[#1F4E79] rounded-2xl p-5 text-white flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <Clock size={28} className="text-white" />
+        <div className="bg-[#1F4E79] rounded-2xl p-4 flex items-center gap-4 shadow-md mb-5">
+          <div className="bg-white/20 rounded-xl p-3">
+            <Clock className="text-white w-6 h-6"/>
           </div>
           <div className="flex-1">
-            <p className="text-blue-200 text-xs font-semibold uppercase tracking-widest mb-1">Compteur D'Heures</p>
-            <p className="text-4xl font-bold">{heures.toFixed(2)}</p>
-            <p className="text-blue-300 text-sm">h</p>
+            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wide">Compteur d'heures</p>
+            <p className="text-white text-3xl font-bold mt-0.5">{heures.toFixed(2)}</p>
+            <p className="text-lg font-medium text-blue-200">h</p>
           </div>
-          <p className="text-blue-300 text-xs text-right">Mis à jour par<br/>l'administration</p>
+          <div className="text-right">
+            <p className="text-blue-300 text-xs">Mis à jour par l'administration</p>
+          </div>
         </div>
 
         {/* Total annuel */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Total Annuel 2026</p>
-          <div className="grid grid-cols-4 gap-2">
-            {totCards.map(card => (
-              <div key={card.key} className={`${card.bg} rounded-2xl p-3 text-center`}>
-                <p className={`text-lg font-bold ${card.color}`}>
-                  {totaux[card.key] && totaux[card.key] !== '0.00' ? totaux[card.key] : '—'}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{card.label}</p>
-                {card.unit && <p className="text-xs text-gray-400">{card.unit}</p>}
+        <div className="px-0 pt-0 pb-2">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Total annuel</p>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+            {FIELDS.map(f=>(
+              <div key={f.key} className={`${f.bg} rounded-2xl p-3 text-center`}>
+                <p className={`text-lg font-bold ${f.color}`}>{parseFloat(totaux[f.key]||'0')>0?totaux[f.key]:'—'}</p>
+                <p className="text-xs font-medium opacity-70">{f.label}</p>
+                {f.unit&&<p className="text-xs opacity-60">{f.unit}</p>}
               </div>
             ))}
           </div>
         </div>
-
-        {/* Saisie mensuelle */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Saisie Mensuelle — 2026</p>
-          <div className="space-y-2">
-            {MOIS.map(mois => {
-              const state = moisStates[mois];
-              const isOpen = openMois === mois;
-              const d = state.data;
-              const hasData = Object.values(d).some(v => v !== '' && v !== '0' && v !== '0.00');
-
-              return (
-                <div key={mois} className={`bg-white rounded-2xl shadow-sm overflow-hidden ${isOpen ? 'ring-2 ring-[#1F4E79]/20' : ''}`}>
-                  <button className="w-full flex items-center justify-between px-5 py-4" onClick={() => handleToggle(mois)}>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-gray-800">{mois}</span>
-                      {hasData && !isOpen && <span className="w-2 h-2 rounded-full bg-green-400" />}
-                    </div>
-                    {isOpen ? <ChevronUp size={16} className="text-[#1F4E79]" /> : <ChevronDown size={16} className="text-gray-400" />}
-                  </button>
-
-                  {isOpen && (
-                    <div className="px-5 pb-5 border-t border-gray-100">
-                      {state.loading ? (
-                        <div className="flex justify-center py-6">
-                          <div className="w-6 h-6 border-4 border-[#1F4E79]/20 border-t-[#1F4E79] rounded-full animate-spin" />
-                        </div>
-                      ) : (
-                        <div className="pt-4 space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
-                            <div><label className={lbl}>Congés (jours)</label><input type="text" value={d.conges} onChange={e => handleChange(mois,'conges',e.target.value)} placeholder="0.00" className={inp} /></div>
-                            <div><label className={lbl}>Maladie (jours)</label><input type="text" value={d.maladie} onChange={e => handleChange(mois,'maladie',e.target.value)} placeholder="0.00" className={inp} /></div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div><label className={lbl}>Transport (€)</label><input type="text" value={d.transport} onChange={e => handleChange(mois,'transport',e.target.value)} placeholder="0.00" className={inp} /></div>
-                            <div><label className={lbl}>Km (km)</label><input type="text" value={d.ndf} onChange={e => handleChange(mois,'ndf',e.target.value)} placeholder="0.00" className={inp} /></div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div><label className={lbl}>Frais pro (€)</label><input type="text" value={d.frais_pro} onChange={e => handleChange(mois,'frais_pro',e.target.value)} placeholder="0.00" className={inp} /></div>
-                            <div><label className={lbl}>Régul avance de frais (€)</label><input type="text" value={d.regule} onChange={e => handleChange(mois,'regule',e.target.value)} placeholder="0.00" className={inp} /></div>
-                          </div>
-                          <div><label className={lbl}>Primes (€)</label><input type="text" value={d.primes} onChange={e => handleChange(mois,'primes',e.target.value)} placeholder="0.00" className={inp} /></div>
-                          <div className="flex justify-end pt-1">
-                            <button onClick={() => handleSave(mois)} disabled={state.saving}
-                              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold text-sm transition-all ${state.saved ? 'bg-green-500 text-white' : 'bg-[#1F4E79] hover:bg-[#163d61] text-white'} disabled:opacity-50`}>
-                              {state.saved ? <><CheckCircle size={15}/>Enregistré !</> : state.saving ? 'Enregistrement…' : <><Save size={15}/>Sauvegarder</>}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       </div>
+
+      {/* Saisie mensuelle */}
+      <div className="max-w-2xl mx-auto px-4 pb-8 space-y-2 mt-4">
+        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Saisie mensuelle — {new Date().getFullYear()}</p>
+        {MOIS.map(mois=>{
+          const isOpen=openMois===mois;
+          const d=getData(mois);
+          const hasData=Object.values(d).some(v=>v&&v!=='0'&&v!=='0.00');
+          return (
+            <div key={mois} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <button className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors" onClick={()=>setOpenMois(isOpen?'':mois)}>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold text-gray-800 text-sm">{mois}</span>
+                  {mois===MOIS[new Date().getMonth()]&&<span className="ml-2 text-xs bg-[#1F4E79] text-white px-2 py-0.5 rounded-full">en cours</span>}
+                  {hasData&&mois!==MOIS[new Date().getMonth()]&&<span className="text-xs text-green-600 font-medium">✓ Renseigné</span>}
+                </div>
+                <span className="text-gray-400">{isOpen?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</span>
+              </button>
+              {isOpen&&(
+                <div className="overflow-hidden">
+                  <div className="px-4 pb-4 pt-1 border-t border-gray-100">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      {FIELDS.map(f=>(
+                        <div key={f.key} className={f.key==='primes'?'col-span-2 sm:col-span-1':''}>
+                          <label className="block text-xs font-semibold text-gray-500 mb-1">
+                            {f.label} <span className="text-gray-400 font-normal ml-1">({f.unit})</span>
+                          </label>
+                          <input type="text" value={d[f.key]} onChange={e=>setField(mois,f.key,e.target.value)} placeholder="0.00"
+                            className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79]"/>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-end mt-3">
+                      <button onClick={()=>handleSave(mois)} disabled={saving[mois]}
+                        className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${saved[mois]?'bg-green-500 text-white':saving[mois]?'bg-gray-200 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+                        {saving[mois]?<span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"/>:null}
+                        {saved[mois]?'✓ Enregistré':saving[mois]?'…':'Sauvegarder'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-center text-blue-300/50 text-xs mt-2 pb-4">© VARIABLES - SOMNUM</p>
     </div>
   );
 }
