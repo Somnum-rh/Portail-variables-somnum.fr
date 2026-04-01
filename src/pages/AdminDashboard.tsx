@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, LogOut, AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare } from 'lucide-react';
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -10,7 +10,7 @@ const SALARIE_CODES: Record<string,string> = {
 const SALARIES = Object.keys(SALARIE_CODES);
 
 interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; }
-type Tab = 'synthese'|'collabs'|'compteurs'|'codes';
+type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes';
 interface AdminDashboardProps { onLogout:()=>void; }
 
 const FIELDS: {key:keyof Omit<RhRow,'salarie_key'|'mois'>;label:string;unit:string;color:string;bg:string}[] = [
@@ -34,6 +34,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [savedAll, setSavedAll] = useState(false);
   const [selectedSal, setSelectedSal] = useState<string|null>(null);
   const [dbOk, setDbOk] = useState<boolean|null>(null);
+  const [allNotes, setAllNotes] = useState<Record<string,string>>({});
 
   const fetchData = async () => {
     try {
@@ -56,11 +57,21 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       }
     } catch {}
   };
+  const fetchNotes = async () => {
+    try {
+      const { data: rows } = await supabase.from('rh_data').select('salarie_key, notes').eq('mois', '__notes__');
+      if (rows) {
+        const m: Record<string,string> = {};
+        rows.forEach((r: any) => { if (r.notes) m[r.salarie_key] = r.notes; });
+        setAllNotes(m);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
-    fetchData(); fetchHeures();
+    fetchData(); fetchHeures(); fetchNotes();
     const ch = supabase.channel('rh_admin')
-      .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},()=>{fetchData();fetchHeures();})
+      .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},()=>{fetchData();fetchHeures();fetchNotes();})
       .subscribe(s=>setRealtime(s==='SUBSCRIBED'));
     return ()=>{ supabase.removeChannel(ch); };
   },[]);
@@ -92,6 +103,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     {id:'collabs' as Tab,label:'👥 Synthèse collabs'},
     {id:'compteurs' as Tab,label:'⏱ Compteurs'},
     {id:'codes' as Tab,label:'🔑 Gestion collabs'},
+    {id:'notes' as Tab,label:'💬 Notes'},
   ];
 
   return (
@@ -295,6 +307,29 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+            {/* NOTES */}
+            {tab === 'notes' && (
+              <div className="space-y-3">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Notes des collaborateurs</p>
+                {Object.keys(allNotes).length === 0 && (
+                  <div className="bg-white rounded-2xl p-8 text-center text-gray-400 text-sm">
+                    <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
+                    Aucune note n'a encore été saisie
+                  </div>
+                )}
+                {SALARIES.filter(s => allNotes[s]).map(sal => (
+                  <div key={sal} className="bg-white rounded-2xl shadow-sm p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-7 h-7 rounded-full bg-[#1F4E79]/10 flex items-center justify-center shrink-0">
+                        <MessageSquare size={13} className="text-[#1F4E79]" />
+                      </div>
+                      <span className="text-sm font-bold text-gray-700">{sal}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 bg-[#f0f4fa] rounded-xl px-3 py-2.5 whitespace-pre-wrap">{allNotes[sal]}</p>
+                  </div>
+                ))}
               </div>
             )}
           </div>

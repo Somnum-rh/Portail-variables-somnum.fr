@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { LogOut, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { LogOut, Clock, ChevronDown, ChevronUp, MessageSquare, Send } from 'lucide-react';
 
 interface SalarieDashboardProps { nom: string; onLogout: () => void; }
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
@@ -23,6 +23,9 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   const [allData, setAllData] = useState<Record<string,VarsData>>({});
   const [saving, setSaving] = useState<Record<string,boolean>>({});
   const [saved, setSaved] = useState<Record<string,boolean>>({});
+  const [note, setNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [savedNote, setSavedNote] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -33,15 +36,19 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
       if (hData) setHeures(parseFloat(hData.ndf)||0);
       if (rows) {
         const d: Record<string,VarsData> = {};
-        rows.forEach((r:any) => { d[r.mois] = {conges:r.conges||'',maladie:r.maladie||'',transport:r.transport||'',ndf:r.ndf||'',frais_pro:r.frais_pro||'',regule:r.regule||'',primes:r.primes||''}; });
+        rows.forEach((r:any) => { if(r.mois!=='__notes__') d[r.mois] = {conges:r.conges||'',maladie:r.maladie||'',transport:r.transport||'',ndf:r.ndf||'',frais_pro:r.frais_pro||'',regule:r.regule||'',primes:r.primes||''}; });
         setAllData(d);
       }
+      // Charger note
+      const { data: noteData } = await supabase.from('rh_data').select('notes').eq('salarie_key', nom).eq('mois', '__notes__').maybeSingle();
+      if (noteData?.notes) setNote(noteData.notes);
       setLoading(false);
     })();
     const ch = supabase.channel('rh_sal_'+nom)
       .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},(p:any)=>{
         const r=p.new??p.old; if(!r||r.salarie_key!==nom) return;
         if(r.mois==='__heures__') setHeures(parseFloat(r.ndf)||0);
+        if(r.mois==='__notes__' && r.salarie_key===nom) setNote(r.notes||'');
       }).subscribe();
     return () => { supabase.removeChannel(ch); };
   },[nom]);
@@ -50,6 +57,13 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   const setField = (mois:string, key:keyof VarsData, val:string) => {
     setAllData(prev=>({...prev,[mois]:{...getData(mois),[key]:val}}));
   };
+  const saveNote = async () => {
+    setSavingNote(true);
+    await supabase.from('rh_data').upsert({ salarie_key: nom, mois: '__notes__', notes: note }, { onConflict: 'salarie_key,mois' });
+    setSavingNote(false); setSavedNote(true);
+    setTimeout(() => setSavedNote(false), 2500);
+  };
+
   const handleSave = async (mois:string) => {
     setSaving(p=>({...p,[mois]:true}));
     await supabase.from('rh_data').upsert({salarie_key:nom,mois,...getData(mois)},{onConflict:'salarie_key,mois'});
@@ -159,6 +173,32 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
             </div>
           );
         })}
+      </div>
+      {/* Notes partagées */}
+      <div className="max-w-2xl mx-auto px-4 pb-6">
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+            <MessageSquare size={15} className="text-[#1F4E79]" />
+            <span className="font-semibold text-gray-800 text-sm">Mes notes</span>
+            <span className="ml-auto text-xs text-gray-400">Partagées avec l'administration</span>
+          </div>
+          <div className="px-4 py-4">
+            <textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Saisissez vos remarques, questions ou informations à transmettre à l'administration…"
+              rows={5}
+              className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] resize-none placeholder-gray-400"
+            />
+            <div className="flex justify-end mt-2">
+              <button onClick={saveNote} disabled={savingNote}
+                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${savedNote ? 'bg-green-500 text-white' : savingNote ? 'bg-gray-200 text-gray-500' : 'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+                {savingNote ? <span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" /> : <Send size={13} />}
+                {savedNote ? '✓ Note enregistrée' : savingNote ? '…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
       <p className="text-center text-blue-300/50 text-xs mt-2 pb-4">© VARIABLES - SOMNUM</p>
     </div>
