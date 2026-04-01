@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare } from 'lucide-react';
+import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy } from 'lucide-react';
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -8,6 +8,7 @@ const SALARIE_CODES: Record<string,string> = {
   "Cuisinier Céline":"482951","Salarié 02":"739204","Salarié 03":"156873","Salarié 04":"924017","Salarié 05":"371485","Salarié 06":"608342","Salarié 07":"219756","Salarié 08":"847293","Salarié 09":"563018","Salarié 10":"431679","Salarié 11":"987025","Salarié 12":"264803","Salarié 13":"718946","Salarié 14":"395271","Salarié 15":"842630","Salarié 16":"157489","Salarié 17":"630247","Salarié 18":"492815","Salarié 19":"873561","Salarié 20":"345098","Salarié 21":"761234","Salarié 22":"508976","Salarié 23":"234817","Salarié 24":"916053","Salarié 25":"673481","Salarié 26":"189327","Salarié 27":"547902","Salarié 28":"823465","Salarié 29":"410793","Salarié 30":"962148","Salarié 31":"285730","Salarié 32":"714896","Salarié 33":"439025","Salarié 34":"597384","Salarié 35":"163749","Salarié 36":"820416","Salarié 37":"375892","Salarié 38":"649203","Salarié 39":"917530","Salarié 40":"283647","Salarié 41":"504918","Salarié 42":"761385","Salarié 43":"428071","Salarié 44":"895364","Salarié 45":"137926","Salarié 46":"604851","Salarié 47":"392748","Salarié 48":"819043","Salarié 49":"256739","Salarié 50":"473862"
 };
 const SALARIES = Object.keys(SALARIE_CODES);
+const DEFAULT_CODES = { ...SALARIE_CODES };
 
 interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; }
 type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes';
@@ -33,8 +34,26 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [savingAll, setSavingAll] = useState(false);
   const [savedAll, setSavedAll] = useState(false);
   const [selectedSal, setSelectedSal] = useState<string|null>(null);
+  const [dynCodes, setDynCodes] = useState<Record<string,string>>(SALARIE_CODES);
+  const [newNom, setNewNom] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [addingCollab, setAddingCollab] = useState(false);
+  const [addMsg, setAddMsg] = useState('');
+  const [deletingCollab, setDeletingCollab] = useState<string|null>(null);
+  const [copiedCode, setCopiedCode] = useState<string|null>(null);
   const [dbOk, setDbOk] = useState<boolean|null>(null);
   const [allNotes, setAllNotes] = useState<Record<string,string>>({});
+
+  const fetchCodes = async () => {
+    try {
+      const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code');
+      if (rows && rows.length > 0) {
+        const m: Record<string,string> = { ...DEFAULT_CODES };
+        rows.forEach((r:any) => { m[r.salarie_key] = r.code; });
+        setDynCodes(m);
+      }
+    } catch {}
+  };
 
   const fetchData = async () => {
     try {
@@ -69,7 +88,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   useEffect(() => {
-    fetchData(); fetchHeures(); fetchNotes();
+    fetchCodes(); fetchData(); fetchHeures(); fetchNotes();
     const ch = supabase.channel('rh_admin')
       .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},()=>{fetchData();fetchHeures();fetchNotes();})
       .subscribe(s=>setRealtime(s==='SUBSCRIBED'));
@@ -78,6 +97,43 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const filledCount = SALARIES.filter(s=>data.some(r=>r.salarie_key===s)).length;
   const totalHeures = SALARIES.reduce((sum,s)=>sum+(parseFloat(heures[s]||'0')),0);
+
+  const SALARIES_DYN = Object.keys(dynCodes);
+
+  const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+  const addCollab = async () => {
+    const nom = newNom.trim();
+    const code = newCode.trim() || genCode();
+    if (!nom) return;
+    setAddingCollab(true);
+    try {
+      await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' });
+      setDynCodes(prev => ({ ...prev, [nom]: code }));
+      setNewNom(''); setNewCode('');
+      setAddMsg(`✓ ${nom} ajouté avec le code ${code}`);
+      setTimeout(() => setAddMsg(''), 3500);
+    } catch {}
+    setAddingCollab(false);
+  };
+
+  const deleteCollab = async (sal: string) => {
+    if (!window.confirm(`Supprimer ${sal} et toutes ses données ?`)) return;
+    setDeletingCollab(sal);
+    try {
+      await supabase.from('rh_codes').delete().eq('salarie_key', sal);
+      await supabase.from('rh_data').delete().eq('salarie_key', sal);
+      setDynCodes(prev => { const n = { ...prev }; delete n[sal]; return n; });
+    } catch {}
+    setDeletingCollab(null);
+    if (selectedSal === sal) setSelectedSal(null);
+  };
+
+  const copyCode = (code: string, sal: string) => {
+    navigator.clipboard.writeText(code).catch(() => {});
+    setCopiedCode(sal);
+    setTimeout(() => setCopiedCode(null), 1500);
+  };
 
   const getRow = (sal:string,mois:string) => data.find(r=>r.salarie_key===sal&&r.mois===mois);
   const totaux = FIELDS.reduce((acc,f)=>{
@@ -114,7 +170,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <p className="text-blue-200 text-xs font-medium uppercase tracking-wide">Administration</p>
             <h1 className="text-lg font-bold mt-0.5 flex items-center gap-2"><Users size={16}/> VARIABLES - SOMNUM</h1>
             <p className="text-blue-300 text-xs">
-              {loading?'Chargement…':`${filledCount} / ${SALARIES.length} salariés ont saisi des données`}
+              {loading?'Chargement…':`${filledCount} / ${SALARIES_DYN.length} salariés ont saisi des données`}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -170,7 +226,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                   ))}
                 </div>
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Récapitulatif ({SALARIES.length} salariés)</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Récapitulatif ({SALARIES_DYN.length} salariés)</p>
                 <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
@@ -180,7 +236,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {SALARIES.map((sal,i)=>(
+                      {SALARIES_DYN.map((sal,i)=>(
                         <tr key={sal} className={i%2===0?'bg-white':'bg-blue-50/30'}>
                           <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{sal}</td>
                           {MOIS.map(mois=>{
@@ -257,7 +313,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {SALARIES.map((sal,i)=>(
+                      {SALARIES_DYN.map((sal,i)=>(
                         <tr key={sal} className={i%2===0?'bg-white':'bg-gray-50/50'}>
                           <td className="px-4 py-3 font-medium text-gray-700">{sal}</td>
                           <td className="px-4 py-2 text-center">
@@ -284,15 +340,54 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             {/* GESTION COLLABS */}
             {tab==='codes'&&(
               <div className="space-y-4">
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Codes d'accès collaborateurs</p>
+                {/* Formulaire ajout */}
+                <div className="bg-white rounded-2xl shadow-sm p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <UserPlus size={16} className="text-[#1F4E79]"/>
+                    <span className="font-bold text-gray-800 text-sm">Ajouter un collaborateur</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Nom complet</label>
+                      <input type="text" value={newNom} onChange={e=>setNewNom(e.target.value)} placeholder="Ex: Dupont Marie"
+                        className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79]"/>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Code (auto si vide)</label>
+                      <input type="text" value={newCode} onChange={e=>setNewCode(e.target.value)} placeholder="Ex: 123456"
+                        className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] font-mono"/>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={addCollab} disabled={!newNom.trim()||addingCollab}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#1F4E79] hover:bg-[#163d61] text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-50">
+                      <UserPlus size={13}/>{addingCollab?'Ajout…':'Ajouter'}
+                    </button>
+                    {addMsg && <p className="text-green-600 text-xs font-medium">{addMsg}</p>}
+                  </div>
+                </div>
+
+                {/* Liste */}
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{SALARIES_DYN.length} collaborateurs</p>
                 {selectedSal===null?(
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {SALARIES.map(sal=>(
-                      <button key={sal} onClick={()=>setSelectedSal(sal)}
-                        className="bg-white rounded-2xl px-4 py-3 text-left hover:shadow-md transition-all flex items-center justify-between">
-                        <span className="font-medium text-gray-700 text-sm">{sal}</span>
-                        <span className="text-xs bg-[#1F4E79]/10 text-[#1F4E79] px-2 py-1 rounded-lg font-mono">{SALARIE_CODES[sal]}</span>
-                      </button>
+                    {SALARIES_DYN.map(sal=>(
+                      <div key={sal} className="bg-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm hover:shadow-md transition-all">
+                        <button onClick={()=>setSelectedSal(sal)} className="flex-1 text-left">
+                          <span className="font-medium text-gray-700 text-sm">{sal}</span>
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs bg-[#1F4E79]/10 text-[#1F4E79] px-2 py-1 rounded-lg font-mono">{dynCodes[sal]}</span>
+                          <button onClick={()=>copyCode(dynCodes[sal],sal)} title="Copier"
+                            className={`p-1.5 rounded-lg transition-all ${copiedCode===sal?'bg-green-100 text-green-600':'text-gray-400 hover:bg-gray-100'}`}>
+                            <Copy size={12}/>
+                          </button>
+                          <button onClick={()=>deleteCollab(sal)} disabled={deletingCollab===sal} title="Supprimer"
+                            className="p-1.5 rounded-lg text-gray-300 hover:bg-red-50 hover:text-red-500 transition-all disabled:opacity-50">
+                            {deletingCollab===sal?<span className="w-3 h-3 border-2 border-red-300 border-t-red-500 rounded-full animate-spin block"/>:<Trash2 size={12}/>}
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
                 ):(
@@ -303,8 +398,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </div>
                     <div className="bg-[#f0f4fa] rounded-xl px-4 py-3 flex items-center justify-between">
                       <span className="text-xs text-gray-500 font-medium">Code d'accès</span>
-                      <span className="font-mono font-bold text-[#1F4E79] text-lg">{SALARIE_CODES[selectedSal]}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-[#1F4E79] text-lg">{dynCodes[selectedSal]}</span>
+                        <button onClick={()=>copyCode(dynCodes[selectedSal],selectedSal)}
+                          className={`p-1.5 rounded-lg transition-all ${copiedCode===selectedSal?'bg-green-100 text-green-600':'text-gray-400 hover:bg-gray-100'}`}>
+                          <Copy size={14}/>
+                        </button>
+                      </div>
                     </div>
+                    <button onClick={()=>deleteCollab(selectedSal)} disabled={deletingCollab===selectedSal}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-red-500 hover:bg-red-50 transition-all disabled:opacity-50">
+                      <Trash2 size={12}/>Supprimer ce collaborateur
+                    </button>
                   </div>
                 )}
               </div>
@@ -319,7 +424,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     Aucune note n'a encore été saisie
                   </div>
                 )}
-                {SALARIES.filter(s => allNotes[s]).map(sal => (
+                {SALARIES_DYN.filter(s => allNotes[s]).map(sal => (
                   <div key={sal} className="bg-white rounded-2xl shadow-sm p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-7 h-7 rounded-full bg-[#1F4E79]/10 flex items-center justify-center shrink-0">
