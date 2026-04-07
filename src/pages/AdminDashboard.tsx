@@ -59,7 +59,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     try {
       const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code, societe');
       if (rows && rows.length > 0) {
-        const m: Record<string,string> = { ...DEFAULT_CODES };
+        const m: Record<string,string> = {};
         const s: Record<string,string> = {};
         rows.forEach((r:any) => { m[r.salarie_key] = r.code; if (r.societe) s[r.salarie_key] = r.societe; });
         setDynCodes(m);
@@ -108,10 +108,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     return ()=>{ supabase.removeChannel(ch); };
   },[]);
 
-  const filledCount = SALARIES.filter(s=>data.some(r=>r.salarie_key===s)).length;
-  const totalHeures = SALARIES.reduce((sum,s)=>sum+(parseFloat(heures[s]||'0')),0);
-
   const SALARIES_DYN = Object.keys(dynCodes);
+
+  const filledCount = SALARIES_DYN.filter(s=>data.some(r=>r.salarie_key===s)).length;
+  const totalHeures = SALARIES_DYN.reduce((sum,s)=>sum+(parseFloat(heures[s]||'0')),0);
 
   const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
@@ -202,7 +202,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
   const saveAllH = async () => {
     setSavingAll(true);
-    for(const sal of SALARIES) await saveH(sal);
+    for(const sal of SALARIES_DYN) await saveH(sal);
     setSavingAll(false); setSavedAll(true);
     setTimeout(()=>setSavedAll(false),2000);
   };
@@ -219,7 +219,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const SALARIES_SORTED = [...SALARIES_DYN].sort((a, b) => a.localeCompare(b, 'fr'));
   const filteredSalaries = SALARIES_SORTED
     .filter(s => !filterSociete || dynSocietes[s] === filterSociete)
-    .filter(s => !searchQuery || s.toLowerCase().includes(searchQuery.toLowerCase()) || (dynSocietes[s]||'').toLowerCase().includes(searchQuery.toLowerCase()));
+    .filter(s => !searchQuery.trim() || s.toLowerCase().includes(searchQuery.toLowerCase()) || (dynSocietes[s]||'').toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredData = data.filter(r => !filterSociete && !searchQuery.trim() ? true : filteredSalaries.includes(r.salarie_key));
 
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
@@ -357,8 +358,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.length===0&&<tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
-                    {data.map((row,i)=>(
+                    {filteredData.length===0&&<tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
+                    {filteredData.map((row,i)=>(
                       <tr key={i} className={i%2===0?'bg-white':'bg-blue-50/30'}>
                         <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.salarie_key}</td>
                         <td className="px-2 py-2 text-gray-600">{row.mois}</td>
@@ -400,7 +401,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       </tr>
                     </thead>
                     <tbody>
-                      {SALARIES_DYN.map((sal,i)=>(
+                      {filteredSalaries.map((sal,i)=>(
                         <tr key={sal} className={i%2===0?'bg-white':'bg-gray-50/50'}>
                           <td className="px-4 py-3 font-medium text-gray-700">{sal}</td>
                           <td className="px-4 py-2 text-center">
@@ -462,10 +463,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 </div>
 
                 {/* Liste */}
-                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{SALARIES_DYN.length} collaborateurs</p>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">{filteredSalaries.length} collaborateurs{searchQuery||filterSociete?' (filtré)':''}</p>
                 {selectedSal===null?(
                   <div className="grid gap-2 sm:grid-cols-2">
-                    {SALARIES_DYN.map(sal=>(
+                    {filteredSalaries.map(sal=>(
                       <div key={sal} className="bg-white rounded-2xl px-4 py-3 shadow-sm hover:shadow-md transition-all">
                         {editingCollab === sal ? (
                           /* MODE ÉDITION */
@@ -563,7 +564,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                     Aucune note n'a encore été saisie
                   </div>
                 )}
-                {SALARIES_DYN.filter(s => allNotes[s]).map(sal => (
+                {filteredSalaries.filter(s => allNotes[s]).map(sal => (
                   <div key={sal} className="bg-white rounded-2xl shadow-sm p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <div className="w-7 h-7 rounded-full bg-[#1F4E79]/10 flex items-center justify-center shrink-0">
