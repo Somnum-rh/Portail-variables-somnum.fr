@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy, Pencil, Check, X } from 'lucide-react';
+import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy, Pencil, Check, X, Search, Filter } from 'lucide-react';
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -44,6 +44,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [deletingCollab, setDeletingCollab] = useState<string|null>(null);
   const [copiedCode, setCopiedCode] = useState<string|null>(null);
   const [filterSociete, setFilterSociete] = useState<string|null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [dbOk, setDbOk] = useState<boolean|null>(null);
   const [allNotes, setAllNotes] = useState<Record<string,string>>({});
 
@@ -215,9 +216,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   ];
 
   const societes = [...new Set(Object.values(dynSocietes).filter(Boolean))].sort();
-  const filteredSalaries = filterSociete
-    ? SALARIES_DYN.filter(s => dynSocietes[s] === filterSociete)
-    : SALARIES_DYN;
+  const SALARIES_SORTED = [...SALARIES_DYN].sort((a, b) => a.localeCompare(b, 'fr'));
+  const filteredSalaries = SALARIES_SORTED
+    .filter(s => !filterSociete || dynSocietes[s] === filterSociete)
+    .filter(s => !searchQuery || s.toLowerCase().includes(searchQuery.toLowerCase()) || (dynSocietes[s]||'').toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
@@ -258,7 +260,35 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
       ):(
         <>
+          {/* Barre recherche + filtre société */}
           <div className="max-w-4xl mx-auto px-4 pt-4">
+            <div className="flex flex-wrap gap-2 mb-3">
+              <div className="relative flex-1 min-w-[180px]">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                <input type="text" value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+                  placeholder="Rechercher un collaborateur…"
+                  className="w-full pl-9 pr-4 py-2.5 bg-white rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-[#1F4E79] shadow-sm"/>
+                {searchQuery && <button onClick={()=>setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={13}/></button>}
+              </div>
+              {societes.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Filter size={13} className="text-gray-400"/>
+                  <button onClick={()=>setFilterSociete(null)}
+                    className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${filterSociete===null?'bg-[#1F4E79] text-white':'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'}`}>
+                    Toutes
+                  </button>
+                  {societes.map(s=>(
+                    <button key={s} onClick={()=>setFilterSociete(s===filterSociete?null:s)}
+                      className={`px-3 py-2 rounded-xl text-xs font-medium transition-all ${filterSociete===s?'bg-[#1F4E79] text-white':'bg-white text-gray-500 hover:bg-gray-50 border border-gray-200'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="max-w-4xl mx-auto px-4">
             <div className="flex gap-1 bg-white rounded-2xl p-1 shadow-sm overflow-x-auto">
               {TABS.map(t=>(
                 <button key={t.id} onClick={()=>setTab(t.id)}
@@ -273,22 +303,6 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             {/* SYNTHÈSE */}
             {tab==='synthese'&&(
               <div>
-                {/* Filtre société */}
-                <div className="flex items-center gap-2 bg-white rounded-2xl px-4 py-2.5 shadow-sm flex-wrap mb-4">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide shrink-0">Société :</span>
-                  <div className="flex flex-wrap gap-2">
-                    <button onClick={()=>setFilterSociete(null)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterSociete===null?'bg-[#1F4E79] text-white':'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                      Toutes
-                    </button>
-                    {societes.map(s=>(
-                      <button key={s} onClick={()=>setFilterSociete(s)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterSociete===s?'bg-[#1F4E79] text-white':'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
                 <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Totaux globaux</p>
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 mb-6">
                   {FIELDS.map(f=>(
