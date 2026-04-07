@@ -18,7 +18,7 @@ const FIELDS: {key:keyof Omit<RhRow,'salarie_key'|'mois'>;label:string;unit:stri
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-700',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-700',bg:'bg-orange-100'},
   {key:'transport',label:'Transport',unit:'€',color:'text-green-700',bg:'bg-green-100'},
-  {key:'ndf',label:'KM',unit:'€',color:'text-cyan-700',bg:'bg-cyan-100'},
+  {key:'ndf',label:'KM',unit:'km',color:'text-cyan-700',bg:'bg-cyan-100'},
   {key:'frais_pro',label:'Frais pro',unit:'€',color:'text-purple-700',bg:'bg-purple-100'},
   {key:'regule',label:'Régul',unit:'€',color:'text-pink-700',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-700',bg:'bg-emerald-100'},
@@ -336,7 +336,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <th className="px-2 py-3">Congés</th>
                       <th className="px-2 py-3">Maladie</th>
                       <th className="px-2 py-3">Transport</th>
-                      <th className="px-2 py-3">KM</th>
+                      <th className="px-2 py-3">KM (km)</th>
                       <th className="px-2 py-3">Frais pro</th>
                       <th className="px-2 py-3">Régul</th>
                       <th className="px-2 py-3">Primes</th>
