@@ -55,21 +55,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [editSociete, setEditSociete] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
-  // Indique si la colonne 'societe' existe dans rh_codes
-  const [hasSocieteCol, setHasSocieteCol] = useState(false);
   const [editError, setEditError] = useState('');
   const [addError, setAddError] = useState('');
 
   const fetchCodes = async () => {
-    // Essayer avec societe d'abord
-    let { data: rows, error } = await supabase.from('rh_codes').select('salarie_key, code, societe');
-    if (error && error.message.includes('societe')) {
-      // Colonne absente : charger sans
-      ({ data: rows, error } = await supabase.from('rh_codes').select('salarie_key, code'));
-      setHasSocieteCol(false);
-    } else {
-      setHasSocieteCol(true);
-    }
+    const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code, societe');
     if (rows && rows.length > 0) {
       const m: Record<string,string> = {};
       const s: Record<string,string> = {};
@@ -146,14 +136,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         const { error: updErr } = await supabase.from('rh_data').update({ salarie_key: nom }).eq('salarie_key', oldSal);
         if (updErr) { setEditError('Erreur mise à jour données : ' + updErr.message); setSavingEdit(false); return; }
       }
-      // Upsert avec societe si colonne existante
-      const payload: Record<string,string> = { salarie_key: nom, code };
-      if (hasSocieteCol) payload.societe = societe;
-      let { error } = await supabase.from('rh_codes').upsert(payload, { onConflict: 'salarie_key' });
-      if (error && error.message.includes('societe')) {
-        // Colonne pas encore créée : sauver sans
-        ({ error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' }));
-      }
+      const { error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe }, { onConflict: 'salarie_key' });
       if (error) { setEditError('Erreur sauvegarde : ' + error.message); setSavingEdit(false); return; }
       setDynCodes(prev => { const n = { ...prev }; if (nom !== oldSal) delete n[oldSal]; n[nom] = code; return n; });
       setDynSocietes(prev => { const n = { ...prev }; if (nom !== oldSal) delete n[oldSal]; if (societe) n[nom] = societe; return n; });
@@ -168,12 +151,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const soc = newSociete.trim();
     if (!nom) return;
     setAddingCollab(true); setAddError('');
-    const payload: Record<string,string> = { salarie_key: nom, code };
-    if (soc) payload.societe = soc;
-    let { error } = await supabase.from('rh_codes').upsert(payload, { onConflict: 'salarie_key' });
-    if (error && error.message.includes('societe')) {
-      ({ error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' }));
-    }
+    const { error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe: soc || '' }, { onConflict: 'salarie_key' });
     if (error) { setAddError('❌ Erreur : ' + error.message); setAddingCollab(false); return; }
     setDynCodes(prev => ({ ...prev, [nom]: code }));
     if (soc) setDynSocietes(prev => ({ ...prev, [nom]: soc }));

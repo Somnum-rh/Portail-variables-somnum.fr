@@ -74,20 +74,12 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   const handleSave = async (mois:string) => {
     setSaving(p=>({...p,[mois]:true})); setSaveError(p=>({...p,[mois]:''}) );
     const d = getData(mois);
-    const payload: Record<string,string> = {
-      salarie_key: nom, mois,
-      conges: d.conges, maladie: d.maladie, transport: d.transport,
-      ndf: d.ndf, regule: d.regule, primes: d.primes
-    };
-    // frais_pro : inclus seulement si la colonne existe (on essaie toujours)
-    const fullPayload = { ...payload, frais_pro: d.frais_pro };
-    let { error } = await supabase.from('rh_data').upsert(fullPayload, { onConflict: 'salarie_key,mois' });
-    if (error && error.message.includes('frais_pro')) {
-      // Colonne absente : on sauvegarde sans frais_pro
-      ({ error } = await supabase.from('rh_data').upsert(payload, { onConflict: 'salarie_key,mois' }));
-    }
+    const { error } = await supabase.from('rh_data').upsert(
+      { salarie_key: nom, mois, conges: d.conges, maladie: d.maladie, transport: d.transport, ndf: d.ndf, frais_pro: d.frais_pro, regule: d.regule, primes: d.primes },
+      { onConflict: 'salarie_key,mois' }
+    );
     setSaving(p=>({...p,[mois]:false}));
-    if (error) { setSaveError(p=>({...p,[mois]: 'Erreur : ' + error!.message})); }
+    if (error) { setSaveError(p=>({...p,[mois]: 'Erreur : ' + error.message})); }
     else { setSaved(p=>({...p,[mois]:true})); setTimeout(()=>setSaved(p=>({...p,[mois]:false})),2000); }
   };
 
