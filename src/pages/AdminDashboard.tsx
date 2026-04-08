@@ -55,17 +55,28 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [editSociete, setEditSociete] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // Indique si la colonne 'societe' existe dans rh_codes
+  const [hasSocieteCol, setHasSocieteCol] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [addError, setAddError] = useState('');
+
   const fetchCodes = async () => {
-    try {
-      const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code, societe');
-      if (rows && rows.length > 0) {
-        const m: Record<string,string> = {};
-        const s: Record<string,string> = {};
-        rows.forEach((r:any) => { m[r.salarie_key] = r.code; if (r.societe) s[r.salarie_key] = r.societe; });
-        setDynCodes(m);
-        setDynSocietes(s);
-      }
-    } catch {}
+    // Essayer avec societe d'abord
+    let { data: rows, error } = await supabase.from('rh_codes').select('salarie_key, code, societe');
+    if (error && error.message.includes('societe')) {
+      // Colonne absente : charger sans
+      ({ data: rows, error } = await supabase.from('rh_codes').select('salarie_key, code'));
+      setHasSocieteCol(false);
+    } else {
+      setHasSocieteCol(true);
+    }
+    if (rows && rows.length > 0) {
+      const m: Record<string,string> = {};
+      const s: Record<string,string> = {};
+      rows.forEach((r:any) => { m[r.salarie_key] = r.code; if (r.societe) s[r.salarie_key] = r.societe; });
+      setDynCodes(m);
+      setDynSocietes(s);
+    }
   };
 
   const fetchData = async () => {
@@ -127,29 +138,27 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const code = editCode.trim() || genCode();
     const societe = editSociete.trim();
     if (!nom) return;
-    setSavingEdit(true);
+    setSavingEdit(true); setEditError('');
     try {
-      // Si le nom a changé : supprimer l'ancien, insérer le nouveau
       if (nom !== oldSal) {
-        await supabase.from('rh_codes').delete().eq('salarie_key', oldSal);
-        await supabase.from('rh_data').update({ salarie_key: nom }).eq('salarie_key', oldSal);
+        const { error: delErr } = await supabase.from('rh_codes').delete().eq('salarie_key', oldSal);
+        if (delErr) { setEditError('Erreur suppression ancien nom : ' + delErr.message); setSavingEdit(false); return; }
+        const { error: updErr } = await supabase.from('rh_data').update({ salarie_key: nom }).eq('salarie_key', oldSal);
+        if (updErr) { setEditError('Erreur mise à jour données : ' + updErr.message); setSavingEdit(false); return; }
       }
-      await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe }, { onConflict: 'salarie_key' });
-      // Mettre à jour l'état local
-      setDynCodes(prev => {
-        const n = { ...prev };
-        if (nom !== oldSal) delete n[oldSal];
-        n[nom] = code;
-        return n;
-      });
-      setDynSocietes(prev => {
-        const n = { ...prev };
-        if (nom !== oldSal) delete n[oldSal];
-        n[nom] = societe;
-        return n;
-      });
+      // Upsert avec societe si colonne existante
+      const payload: Record<string,string> = { salarie_key: nom, code };
+      if (hasSocieteCol) payload.societe = societe;
+      let { error } = await supabase.from('rh_codes').upsert(payload, { onConflict: 'salarie_key' });
+      if (error && error.message.includes('societe')) {
+        // Colonne pas encore créée : sauver sans
+        ({ error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' }));
+      }
+      if (error) { setEditError('Erreur sauvegarde : ' + error.message); setSavingEdit(false); return; }
+      setDynCodes(prev => { const n = { ...prev }; if (nom !== oldSal) delete n[oldSal]; n[nom] = code; return n; });
+      setDynSocietes(prev => { const n = { ...prev }; if (nom !== oldSal) delete n[oldSal]; if (societe) n[nom] = societe; return n; });
       setEditingCollab(null);
-    } catch {}
+    } catch(e: any) { setEditError('Erreur inattendue : ' + (e?.message || e)); }
     setSavingEdit(false);
   };
 
@@ -158,15 +167,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     const code = newCode.trim() || genCode();
     const soc = newSociete.trim();
     if (!nom) return;
-    setAddingCollab(true);
-    try {
-      await supabase.from('rh_codes').upsert({ salarie_key: nom, code, societe: soc || null }, { onConflict: 'salarie_key' });
-      setDynCodes(prev => ({ ...prev, [nom]: code }));
-      setDynSocietes(prev => soc ? { ...prev, [nom]: soc } : prev);
-      setNewNom(''); setNewCode(''); setNewSociete('');
-      setAddMsg(`✓ ${nom} ajouté avec le code ${code}`);
-      setTimeout(() => setAddMsg(''), 3500);
-    } catch {}
+    setAddingCollab(true); setAddError('');
+    const payload: Record<string,string> = { salarie_key: nom, code };
+    if (soc) payload.societe = soc;
+    let { error } = await supabase.from('rh_codes').upsert(payload, { onConflict: 'salarie_key' });
+    if (error && error.message.includes('societe')) {
+      ({ error } = await supabase.from('rh_codes').upsert({ salarie_key: nom, code }, { onConflict: 'salarie_key' }));
+    }
+    if (error) { setAddError('❌ Erreur : ' + error.message); setAddingCollab(false); return; }
+    setDynCodes(prev => ({ ...prev, [nom]: code }));
+    if (soc) setDynSocietes(prev => ({ ...prev, [nom]: soc }));
+    setNewNom(''); setNewCode(''); setNewSociete('');
+    setAddMsg(`✓ ${nom} ajouté avec le code ${code}`);
+    setTimeout(() => setAddMsg(''), 3500);
     setAddingCollab(false);
   };
 
@@ -459,6 +472,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       <UserPlus size={13}/>{addingCollab?'Ajout…':'Ajouter'}
                     </button>
                     {addMsg && <p className="text-green-600 text-xs font-medium">{addMsg}</p>}
+                    {addError && <p className="text-red-500 text-xs font-medium">{addError}</p>}
                   </div>
                 </div>
 
@@ -482,15 +496,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                                 placeholder="Société"
                                 className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none"/>
                             </div>
-                            <div className="flex items-center gap-2 pt-1">
-                              <button onClick={()=>saveEdit(sal)} disabled={savingEdit}
-                                className="flex items-center gap-1.5 px-4 py-2 bg-[#1F4E79] text-white rounded-xl text-xs font-semibold hover:bg-[#163d61] transition-all disabled:opacity-50">
-                                <Check size={12}/>{savingEdit?'…':'Enregistrer'}
-                              </button>
-                              <button onClick={()=>setEditingCollab(null)}
-                                className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-200 transition-all">
-                                <X size={12}/>Annuler
-                              </button>
+                            <div className="flex flex-col gap-1 pt-1">
+                              {editError && <p className="text-xs text-red-500 font-medium">❌ {editError}</p>}
+                              <div className="flex items-center gap-2">
+                                <button onClick={()=>saveEdit(sal)} disabled={savingEdit}
+                                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all disabled:opacity-50 ${editError?'bg-red-500 text-white':'bg-[#1F4E79] text-white hover:bg-[#163d61]'}`}>
+                                  <Check size={12}/>{savingEdit?'…':editError?'Réessayer':'Enregistrer'}
+                                </button>
+                                <button onClick={()=>{setEditingCollab(null);setEditError('');}}
+                                  className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-500 rounded-xl text-xs font-medium hover:bg-gray-200 transition-all">
+                                  <X size={12}/>Annuler
+                                </button>
+                              </div>
                             </div>
                           </div>
                         ) : (
