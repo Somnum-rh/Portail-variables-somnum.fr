@@ -57,18 +57,38 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   const setField = (mois:string, key:keyof VarsData, val:string) => {
     setAllData(prev=>({...prev,[mois]:{...getData(mois),[key]:val}}));
   };
+  const [saveError, setSaveError] = useState<Record<string,string>>({});
+  const [noteError, setNoteError] = useState('');
+
   const saveNote = async () => {
-    setSavingNote(true);
-    await supabase.from('rh_data').upsert({ salarie_key: nom, mois: '__notes__', notes: note }, { onConflict: 'salarie_key,mois' });
-    setSavingNote(false); setSavedNote(true);
-    setTimeout(() => setSavedNote(false), 2500);
+    setSavingNote(true); setNoteError('');
+    const { error } = await supabase.from('rh_data').upsert(
+      { salarie_key: nom, mois: '__notes__', notes: note },
+      { onConflict: 'salarie_key,mois' }
+    );
+    setSavingNote(false);
+    if (error) { setNoteError('Erreur : ' + error.message); }
+    else { setSavedNote(true); setTimeout(() => setSavedNote(false), 2500); }
   };
 
   const handleSave = async (mois:string) => {
-    setSaving(p=>({...p,[mois]:true}));
-    await supabase.from('rh_data').upsert({salarie_key:nom,mois,...getData(mois)},{onConflict:'salarie_key,mois'});
-    setSaving(p=>({...p,[mois]:false})); setSaved(p=>({...p,[mois]:true}));
-    setTimeout(()=>setSaved(p=>({...p,[mois]:false})),2000);
+    setSaving(p=>({...p,[mois]:true})); setSaveError(p=>({...p,[mois]:''}) );
+    const d = getData(mois);
+    const payload: Record<string,string> = {
+      salarie_key: nom, mois,
+      conges: d.conges, maladie: d.maladie, transport: d.transport,
+      ndf: d.ndf, regule: d.regule, primes: d.primes
+    };
+    // frais_pro : inclus seulement si la colonne existe (on essaie toujours)
+    const fullPayload = { ...payload, frais_pro: d.frais_pro };
+    let { error } = await supabase.from('rh_data').upsert(fullPayload, { onConflict: 'salarie_key,mois' });
+    if (error && error.message.includes('frais_pro')) {
+      // Colonne absente : on sauvegarde sans frais_pro
+      ({ error } = await supabase.from('rh_data').upsert(payload, { onConflict: 'salarie_key,mois' }));
+    }
+    setSaving(p=>({...p,[mois]:false}));
+    if (error) { setSaveError(p=>({...p,[mois]: 'Erreur : ' + error!.message})); }
+    else { setSaved(p=>({...p,[mois]:true})); setTimeout(()=>setSaved(p=>({...p,[mois]:false})),2000); }
   };
 
   const totaux = FIELDS.reduce((acc,f)=>{
@@ -160,13 +180,14 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
                         </div>
                       ))}
                     </div>
-                    <div className="flex justify-end mt-3">
-                      <button onClick={()=>handleSave(mois)} disabled={saving[mois]}
-                        className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${saved[mois]?'bg-green-500 text-white':saving[mois]?'bg-gray-200 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
-                        {saving[mois]?<span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"/>:null}
-                        {saved[mois]?'✓ Enregistré':saving[mois]?'…':'Sauvegarder'}
-                      </button>
-                    </div>
+                      <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
+                        {saveError[mois] && <p className="text-xs text-red-500 font-medium">❌ {saveError[mois]}</p>}
+                        <button onClick={()=>handleSave(mois)} disabled={saving[mois]}
+                          className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ml-auto ${saved[mois]?'bg-green-500 text-white':saveError[mois]?'bg-red-500 text-white':saving[mois]?'bg-gray-200 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+                          {saving[mois]?<span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"/>:null}
+                          {saved[mois]?'✓ Enregistré':saveError[mois]?'✗ Réessayer':saving[mois]?'…':'Sauvegarder'}
+                        </button>
+                      </div>
                   </div>
                 </div>
               )}
@@ -190,13 +211,16 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
               rows={5}
               className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] resize-none placeholder-gray-400"
             />
-            <div className="flex justify-end mt-2">
-              <button onClick={saveNote} disabled={savingNote}
-                className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${savedNote ? 'bg-green-500 text-white' : savingNote ? 'bg-gray-200 text-gray-500' : 'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
-                {savingNote ? <span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" /> : <Send size={13} />}
-                {savedNote ? '✓ Note enregistrée' : savingNote ? '…' : 'Enregistrer'}
-              </button>
-            </div>
+      <div className="flex justify-end mt-2">
+        <div className="flex flex-col items-end gap-1">
+          {noteError && <p className="text-xs text-red-500 font-medium">❌ {noteError}</p>}
+          <button onClick={saveNote} disabled={savingNote}
+            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${savedNote ? 'bg-green-500 text-white' : noteError ? 'bg-red-500 text-white' : savingNote ? 'bg-gray-200 text-gray-500' : 'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+            {savingNote ? <span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" /> : <Send size={13} />}
+            {savedNote ? '✓ Note enregistrée' : noteError ? '✗ Réessayer' : savingNote ? '…' : 'Enregistrer'}
+          </button>
+        </div>
+      </div>
           </div>
         </div>
       </div>
