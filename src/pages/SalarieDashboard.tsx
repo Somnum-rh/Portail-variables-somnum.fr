@@ -10,7 +10,7 @@ const FIELDS: {key:keyof VarsData;label:string;unit:string;color:string;bg:strin
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-600',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-600',bg:'bg-orange-100'},
   {key:'transport',label:'Transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
-  {key:'ndf',label:'KM',unit:'€',color:'text-cyan-600',bg:'bg-cyan-100'},
+  {key:'ndf',label:'KM',unit:'km',color:'text-cyan-600',bg:'bg-cyan-100'},
   {key:'frais_pro',label:'Frais pro',unit:'',color:'text-purple-600',bg:'bg-purple-100'},
   {key:'regule',label:'Régul avance',unit:'',color:'text-pink-600',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-600',bg:'bg-emerald-100'},
