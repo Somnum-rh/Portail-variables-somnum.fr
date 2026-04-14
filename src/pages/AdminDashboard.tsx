@@ -222,30 +222,19 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setTimeout(()=>setSavedAll(false),2000);
   };
 
-  const saveHSupForSal = async (sal: string) => {
+    const saveHSupForSal = async (sal: string) => {
     setSavingHSup(p=>({...p,[sal]:true}));
-    setHSupColError('');
     const moisData = hSup[sal] || {};
-    let hasError = false;
     for (const [mois, val] of Object.entries(moisData)) {
       if (!val || val.trim() === '') continue;
-      const { error } = await supabase.from('rh_data').upsert(
+      await supabase.from('rh_data').upsert(
         { salarie_key: sal, mois, heures_sup: val },
         { onConflict: 'salarie_key,mois' }
       );
-      if (error) {
-        if (error.message?.includes('heures_sup') || error.code === '42703') {
-          setHSupColError('⚠️ Colonne manquante. Exécutez dans Supabase SQL : ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_sup TEXT DEFAULT \'\';');
-          hasError = true;
-          break;
-        }
-      }
     }
     setSavingHSup(p=>({...p,[sal]:false}));
-    if (!hasError) {
-      setSavedHSup(p=>({...p,[sal]:true}));
-      setTimeout(()=>setSavedHSup(p=>({...p,[sal]:false})),2000);
-    }
+    setSavedHSup(p=>({...p,[sal]:true}));
+    setTimeout(()=>setSavedHSup(p=>({...p,[sal]:false})),2000);
   };
 
   const TABS = [
