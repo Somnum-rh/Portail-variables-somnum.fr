@@ -4,9 +4,9 @@ import { LogOut, Clock, ChevronDown, ChevronUp, MessageSquare, Send } from 'luci
 
 interface SalarieDashboardProps { nom: string; onLogout: () => void; }
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; }
+interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup:string; }
 const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'', heures_sup:'' };
-const FIELDS: {key:keyof Omit<VarsData,'heures_sup'>;label:string;unit:string;color:string;bg:string}[] = [
+const FIELDS: {key:keyof VarsData;label:string;unit:string;color:string;bg:string}[] = [
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-600',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-600',bg:'bg-orange-100'},
   {key:'transport',label:'Transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
@@ -14,6 +14,7 @@ const FIELDS: {key:keyof Omit<VarsData,'heures_sup'>;label:string;unit:string;co
   {key:'frais_pro',label:'Frais pro',unit:'',color:'text-purple-600',bg:'bg-purple-100'},
   {key:'regule',label:'Régul avance',unit:'',color:'text-pink-600',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-600',bg:'bg-emerald-100'},
+  {key:'heures_sup',label:'HS à payer',unit:'h',color:'text-amber-600',bg:'bg-amber-100'},
 ];
 
 export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProps) {
@@ -65,7 +66,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   },[nom]);
 
   const getData = (mois:string): VarsData => allData[mois]??{...EMPTY};
-  const setField = (mois:string, key:keyof Omit<VarsData,'heures_sup'>, val:string) => {
+  const setField = (mois:string, key:keyof VarsData, val:string) => {
     setAllData(prev=>({...prev,[mois]:{...getData(mois),[key]:val}}));
   };
   const [saveError, setSaveError] = useState<Record<string,string>>({});
@@ -86,7 +87,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
     setSaving(p=>({...p,[mois]:true})); setSaveError(p=>({...p,[mois]:''}) );
     const d = getData(mois);
     const { error } = await supabase.from('rh_data').upsert(
-      { salarie_key: nom, mois, conges: d.conges, maladie: d.maladie, transport: d.transport, ndf: d.ndf, frais_pro: d.frais_pro, regule: d.regule, primes: d.primes },
+      { salarie_key: nom, mois, conges: d.conges, maladie: d.maladie, transport: d.transport, ndf: d.ndf, frais_pro: d.frais_pro, regule: d.regule, primes: d.primes, heures_sup: d.heures_sup },
       { onConflict: 'salarie_key,mois' }
     );
     setSaving(p=>({...p,[mois]:false}));
@@ -146,9 +147,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
             {MOIS.map(mois=>{
               const d = getData(mois);
               const isOpen = openMois === mois;
-              const hasData = FIELDS.some(f=>parseFloat((d[f.key] as string)||'0')>0);
-              const hSupVal = d.heures_sup || '';
-              const hSupNum = parseFloat(hSupVal) || 0;
+              const hasData = FIELDS.some(f=>parseFloat(d[f.key]||'0')>0);
               return (
                 <div key={mois} className="bg-white rounded-2xl shadow-sm overflow-hidden">
                   <button
@@ -157,24 +156,12 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
                     <div className="flex items-center gap-2.5">
                       <span className="font-semibold text-gray-700 text-sm">{mois}</span>
                       {hasData && <span className="w-2 h-2 rounded-full bg-green-400"/>}
-                      {hSupNum > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{hSupNum}h sup</span>}
                     </div>
                     {isOpen?<ChevronUp size={16} className="text-gray-400"/>:<ChevronDown size={16} className="text-gray-400"/>}
                   </button>
 
                   {isOpen&&(
                     <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
-                      {/* Badge heures sup (lecture seule) */}
-                      {hSupNum > 0 && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
-                          <span className="text-base">⏱</span>
-                          <span className="text-amber-700 font-semibold text-sm">
-                            Heures sup à payer : <strong>{hSupVal}</strong> h
-                          </span>
-                        </div>
-                      )}
-
-                      {/* Grille champs éditables */}
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {FIELDS.map(f=>(
                           <div key={f.key}>

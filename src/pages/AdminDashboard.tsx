@@ -402,10 +402,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <th className="px-2 py-3">Frais pro</th>
                         <th className="px-2 py-3">Régul</th>
                         <th className="px-2 py-3">Primes</th>
+                        <th className="px-2 py-3">HS à payer</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredDataCollabs.length===0&&<tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
+                      {filteredDataCollabs.length===0&&<tr><td colSpan={10} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
                       {filteredDataCollabs.map((row,i)=>(
                         <tr key={i} className={i%2===0?'bg-white':'bg-blue-50/30'}>
                           <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.salarie_key}</td>
@@ -417,6 +418,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           <td className="px-2 py-2 text-center">{row.frais_pro||'—'}</td>
                           <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
                           <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
+                          <td className="px-2 py-2 text-center text-amber-700 font-medium">{row.heures_sup||'—'}</td>
                         </tr>
                       ))}
                     </tbody>
