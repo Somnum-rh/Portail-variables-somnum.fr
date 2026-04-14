@@ -4,9 +4,9 @@ import { LogOut, Clock, ChevronDown, ChevronUp, MessageSquare, Send } from 'luci
 
 interface SalarieDashboardProps { nom: string; onLogout: () => void; }
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; }
-const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'' };
-const FIELDS: {key:keyof VarsData;label:string;unit:string;color:string;bg:string}[] = [
+interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; }
+const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'', heures_sup:'' };
+const FIELDS: {key:keyof Omit<VarsData,'heures_sup'>;label:string;unit:string;color:string;bg:string}[] = [
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-600',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-600',bg:'bg-orange-100'},
   {key:'transport',label:'Transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
@@ -36,7 +36,18 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
       if (hData) setHeures(parseFloat(hData.ndf)||0);
       if (rows) {
         const d: Record<string,VarsData> = {};
-        rows.forEach((r:any) => { if(r.mois!=='__notes__') d[r.mois] = {conges:r.conges||'',maladie:r.maladie||'',transport:r.transport||'',ndf:r.ndf||'',frais_pro:r.frais_pro||'',regule:r.regule||'',primes:r.primes||''}; });
+        rows.forEach((r:any) => {
+          if(r.mois!=='__notes__') d[r.mois] = {
+            conges:r.conges||'',
+            maladie:r.maladie||'',
+            transport:r.transport||'',
+            ndf:r.ndf||'',
+            frais_pro:r.frais_pro||'',
+            regule:r.regule||'',
+            primes:r.primes||'',
+            heures_sup:r.heures_sup||'',
+          };
+        });
         setAllData(d);
       }
       // Charger note
@@ -54,7 +65,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   },[nom]);
 
   const getData = (mois:string): VarsData => allData[mois]??{...EMPTY};
-  const setField = (mois:string, key:keyof VarsData, val:string) => {
+  const setField = (mois:string, key:keyof Omit<VarsData,'heures_sup'>, val:string) => {
     setAllData(prev=>({...prev,[mois]:{...getData(mois),[key]:val}}));
   };
   const [saveError, setSaveError] = useState<Record<string,string>>({});
@@ -84,139 +95,140 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   };
 
   const totaux = FIELDS.reduce((acc,f)=>{
-    acc[f.key]=String(Object.values(allData).reduce((s,d)=>s+(parseFloat(d[f.key]||'0')),0)||0);
+    acc[f.key]=String(Object.values(allData).reduce((s,d)=>s+(parseFloat((d[f.key] as string)||'0')),0)||0);
     return acc;
-  },{} as VarsData);
+  },{} as Record<string,string>);
 
   if(loading) return (
     <div className="min-h-screen bg-[#f0f4fa] flex flex-col items-center justify-center gap-4">
-      <div className="w-10 h-10 border-4 border-[#1F4E79]/20 border-t-[#1F4E79] rounded-full animate-spin"/>
-      <p className="text-sm text-gray-500">Chargement de vos données…</p>
+      <div className="w-12 h-12 border-4 border-[#1F4E79]/20 border-t-[#1F4E79] rounded-full animate-spin"/>
+      <p className="text-sm text-gray-500 font-medium">Chargement de vos données…</p>
     </div>
   );
 
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
-      <div className="bg-[#1F4E79] text-white px-4 py-4 shadow-lg">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#1F4E79] to-[#2e75b6] text-white px-4 py-4 shadow-lg">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
-            <p className="text-blue-200 text-xs font-medium uppercase tracking-wide">Espace salarié</p>
-            <p className="text-lg font-bold mt-0.5">{nom}</p>
-            <p className="text-blue-300 text-xs">Espace personnel</p>
+            <p className="text-blue-200 text-xs font-medium uppercase tracking-wide">Espace personnel</p>
+            <h1 className="text-lg font-bold mt-0.5">{nom}</h1>
+            <p className="text-blue-300 text-xs flex items-center gap-1.5 mt-0.5">
+              <Clock size={11}/> {heures.toFixed(2)} h comptabilisées
+            </p>
           </div>
-          <button onClick={onLogout} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2 text-sm font-medium transition-all">
-            <LogOut size={14}/><span className="hidden sm:inline">Déconnexion</span>
+          <button onClick={onLogout} className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2 text-xs font-medium transition-all">
+            <LogOut size={12}/><span className="hidden sm:inline">Déconnexion</span>
           </button>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 pt-5">
-        {/* Compteur d'heures */}
-        <div className="bg-[#1F4E79] rounded-2xl p-4 flex items-center gap-4 shadow-md mb-5">
-          <div className="bg-white/20 rounded-xl p-3">
-            <Clock className="text-white w-6 h-6"/>
-          </div>
-          <div className="flex-1">
-            <p className="text-blue-200 text-xs font-semibold uppercase tracking-wide">Compteur d'heures</p>
-            <p className="text-white text-3xl font-bold mt-0.5">{heures.toFixed(2)}</p>
-            <p className="text-lg font-medium text-blue-200">h</p>
-          </div>
-          <div className="text-right">
-            <p className="text-blue-300 text-xs">Mis à jour par l'administration</p>
-          </div>
-        </div>
-
-        {/* Total annuel */}
-        <div className="px-0 pt-0 pb-2">
-          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Total annuel</p>
+      <div className="max-w-2xl mx-auto px-4 pt-5 pb-10 space-y-4">
+        {/* Totaux annuels */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Totaux annuels</p>
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
             {FIELDS.map(f=>(
               <div key={f.key} className={`${f.bg} rounded-2xl p-3 text-center`}>
-                <p className={`text-lg font-bold ${f.color}`}>{parseFloat(totaux[f.key]||'0')>0?totaux[f.key]:'—'}</p>
-                <p className="text-xs font-medium opacity-70">{f.label}</p>
-                {f.unit&&<p className="text-xs opacity-60">{f.unit}</p>}
+                <p className={`text-base font-bold ${f.color}`}>{parseFloat(totaux[f.key]||'0')>0?parseFloat(totaux[f.key]).toFixed(2):'—'}</p>
+                <p className="text-xs font-medium opacity-70 leading-tight">{f.label}</p>
+                <p className="text-xs opacity-50">{f.unit}</p>
               </div>
             ))}
           </div>
         </div>
-      </div>
 
-      {/* Saisie mensuelle */}
-      <div className="max-w-2xl mx-auto px-4 pb-8 space-y-2 mt-4">
-        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Saisie mensuelle — {new Date().getFullYear()}</p>
-        {MOIS.map(mois=>{
-          const isOpen=openMois===mois;
-          const d=getData(mois);
-          const hasData=Object.values(d).some(v=>v&&v!=='0'&&v!=='0.00');
-          return (
-            <div key={mois} className="bg-white rounded-2xl shadow-sm overflow-hidden">
-              <button className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors" onClick={()=>setOpenMois(isOpen?'':mois)}>
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-gray-800 text-sm">{mois}</span>
-                  {mois===MOIS[new Date().getMonth()]&&<span className="ml-2 text-xs bg-[#1F4E79] text-white px-2 py-0.5 rounded-full">en cours</span>}
-                  {hasData&&mois!==MOIS[new Date().getMonth()]&&<span className="text-xs text-green-600 font-medium">✓ Renseigné</span>}
-                </div>
-                <span className="text-gray-400">{isOpen?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</span>
-              </button>
-              {isOpen&&(
-                <div className="overflow-hidden">
-                  <div className="px-4 pb-4 pt-1 border-t border-gray-100">
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {FIELDS.map(f=>(
-                        <div key={f.key} className={f.key==='primes'?'col-span-2 sm:col-span-1':''}>
-                          <label className="block text-xs font-semibold text-gray-500 mb-1">
-                            {f.label} <span className="text-gray-400 font-normal ml-1">({f.unit})</span>
-                          </label>
-                          <input type="text" value={d[f.key]} onChange={e=>setField(mois,f.key,e.target.value)} placeholder="0.00"
-                            className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79]"/>
-                        </div>
-                      ))}
+        {/* Accordéon mensuel */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Données mensuelles</p>
+          <div className="space-y-2">
+            {MOIS.map(mois=>{
+              const d = getData(mois);
+              const isOpen = openMois === mois;
+              const hasData = FIELDS.some(f=>parseFloat((d[f.key] as string)||'0')>0);
+              const hSupVal = d.heures_sup || '';
+              const hSupNum = parseFloat(hSupVal) || 0;
+              return (
+                <div key={mois} className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                  <button
+                    onClick={()=>setOpenMois(isOpen?'':mois)}
+                    className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-semibold text-gray-700 text-sm">{mois}</span>
+                      {hasData && <span className="w-2 h-2 rounded-full bg-green-400"/>}
+                      {hSupNum > 0 && <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-lg font-medium">{hSupNum}h sup</span>}
                     </div>
-                      <div className="flex items-center justify-between mt-3 flex-wrap gap-2">
-                        {saveError[mois] && <p className="text-xs text-red-500 font-medium">❌ {saveError[mois]}</p>}
-                        <button onClick={()=>handleSave(mois)} disabled={saving[mois]}
-                          className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ml-auto ${saved[mois]?'bg-green-500 text-white':saveError[mois]?'bg-red-500 text-white':saving[mois]?'bg-gray-200 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
-                          {saving[mois]?<span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin"/>:null}
-                          {saved[mois]?'✓ Enregistré':saveError[mois]?'✗ Réessayer':saving[mois]?'…':'Sauvegarder'}
-                        </button>
+                    {isOpen?<ChevronUp size={16} className="text-gray-400"/>:<ChevronDown size={16} className="text-gray-400"/>}
+                  </button>
+
+                  {isOpen&&(
+                    <div className="px-4 pb-4 space-y-3 border-t border-gray-100 pt-3">
+                      {/* Badge heures sup (lecture seule) */}
+                      {hSupNum > 0 && (
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-2">
+                          <span className="text-base">⏱</span>
+                          <span className="text-amber-700 font-semibold text-sm">
+                            Heures sup à payer : <strong>{hSupVal}</strong> h
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Grille champs éditables */}
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {FIELDS.map(f=>(
+                          <div key={f.key}>
+                            <label className={`block text-xs font-semibold mb-1 ${f.color} uppercase tracking-wide`}>{f.label} {f.unit&&<span className="font-normal opacity-60">({f.unit})</span>}</label>
+                            <input
+                              type="text"
+                              value={(d[f.key] as string)||''}
+                              onChange={e=>setField(mois, f.key, e.target.value)}
+                              className="w-full px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] transition-colors"
+                            />
+                          </div>
+                        ))}
                       </div>
-                  </div>
+
+                      {saveError[mois] && <p className="text-xs text-red-500 font-medium">{saveError[mois]}</p>}
+                      <button
+                        onClick={()=>handleSave(mois)}
+                        disabled={saving[mois]}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all w-full justify-center ${saved[mois]?'bg-green-500 text-white':saving[mois]?'bg-gray-300 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+                        {saved[mois]?'✓ Sauvegardé !':saving[mois]?'Sauvegarde…':'Sauvegarder'}
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      {/* Notes partagées */}
-      <div className="max-w-2xl mx-auto px-4 pb-6">
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-            <MessageSquare size={15} className="text-[#1F4E79]" />
-            <span className="font-semibold text-gray-800 text-sm">Mes notes</span>
-            <span className="ml-auto text-xs text-gray-400">Partagées avec l'administration</span>
+              );
+            })}
           </div>
-          <div className="px-4 py-4">
+        </div>
+
+        {/* Section Note */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Message à l'administration</p>
+          <div className="bg-white rounded-2xl shadow-sm p-4 space-y-3">
+            <div className="flex items-center gap-2 text-gray-600">
+              <MessageSquare size={15}/>
+              <span className="text-sm font-medium">Note libre</span>
+            </div>
             <textarea
               value={note}
-              onChange={e => setNote(e.target.value)}
-              placeholder="Saisissez vos remarques, questions ou informations à transmettre à l'administration…"
-              rows={5}
-              className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] resize-none placeholder-gray-400"
+              onChange={e=>setNote(e.target.value)}
+              rows={3}
+              placeholder="Écrivez ici votre message ou remarque pour l'administration…"
+              className="w-full px-3 py-2.5 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79] resize-none transition-colors"
             />
-      <div className="flex justify-end mt-2">
-        <div className="flex flex-col items-end gap-1">
-          {noteError && <p className="text-xs text-red-500 font-medium">❌ {noteError}</p>}
-          <button onClick={saveNote} disabled={savingNote}
-            className={`flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold transition-all ${savedNote ? 'bg-green-500 text-white' : noteError ? 'bg-red-500 text-white' : savingNote ? 'bg-gray-200 text-gray-500' : 'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
-            {savingNote ? <span className="w-4 h-4 border-2 border-gray-400 border-t-white rounded-full animate-spin" /> : <Send size={13} />}
-            {savedNote ? '✓ Note enregistrée' : noteError ? '✗ Réessayer' : savingNote ? '…' : 'Enregistrer'}
-          </button>
-        </div>
-      </div>
+            {noteError && <p className="text-xs text-red-500 font-medium">{noteError}</p>}
+            <button
+              onClick={saveNote}
+              disabled={savingNote}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all ${savedNote?'bg-green-500 text-white':savingNote?'bg-gray-300 text-gray-500':'bg-[#1F4E79] hover:bg-[#163d61] text-white'}`}>
+              <Send size={13}/>{savedNote?'Envoyé !':savingNote?'Envoi…':'Envoyer la note'}
+            </button>
           </div>
         </div>
       </div>
-      <p className="text-center text-blue-300/50 text-xs mt-2 pb-4">© VARIABLES - SOMNUM</p>
     </div>
   );
 }

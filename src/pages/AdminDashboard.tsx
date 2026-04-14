@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy, Pencil, Check, X, Search, Filter } from 'lucide-react';
 
+// SQL à exécuter dans Supabase pour activer les heures sup :
+// ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_sup TEXT DEFAULT '';
+
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 const SALARIE_CODES: Record<string,string> = {
@@ -10,7 +13,7 @@ const SALARIE_CODES: Record<string,string> = {
 const SALARIES = Object.keys(SALARIE_CODES);
 const DEFAULT_CODES = { ...SALARIE_CODES };
 
-interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; }
+interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; }
 type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes';
 interface AdminDashboardProps { onLogout:()=>void; }
 
@@ -22,6 +25,7 @@ const FIELDS: {key:keyof Omit<RhRow,'salarie_key'|'mois'>;label:string;unit:stri
   {key:'frais_pro',label:'Frais pro',unit:'€',color:'text-purple-700',bg:'bg-purple-100'},
   {key:'regule',label:'Régul',unit:'€',color:'text-pink-700',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-700',bg:'bg-emerald-100'},
+  {key:'heures_sup',label:'H.Sup',unit:'h',color:'text-amber-700',bg:'bg-amber-100'},
 ];
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
@@ -44,9 +48,16 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [deletingCollab, setDeletingCollab] = useState<string|null>(null);
   const [copiedCode, setCopiedCode] = useState<string|null>(null);
   const [filterSociete, setFilterSociete] = useState<string|null>(null);
+  const [filterMois, setFilterMois] = useState<string|null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [dbOk, setDbOk] = useState<boolean|null>(null);
   const [allNotes, setAllNotes] = useState<Record<string,string>>({});
+
+  // États heures sup
+  const [hSup, setHSup] = useState<Record<string, Record<string,string>>>({});
+  const [savingHSup, setSavingHSup] = useState<Record<string,boolean>>({});
+  const [savedHSup, setSavedHSup] = useState<Record<string,boolean>>({});
+  const [hSupColError, setHSupColError] = useState('');
 
   // États édition inline
   const [editingCollab, setEditingCollab] = useState<string|null>(null);
@@ -72,34 +83,47 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const fetchData = async () => {
     try {
       const { data: rows, error } = await supabase.from('rh_data').select('*').neq('mois','__heures__').neq('mois','__notes__');
-      if (error) { setDbOk(false); setLoading(false); return; }
+      if (error) { setDbOk(false); return; }
       setDbOk(true);
-      if (rows) setData(rows as RhRow[]);
+      setData((rows||[]) as RhRow[]);
     } catch { setDbOk(false); }
-    setLoading(false);
   };
+
   const fetchHeures = async () => {
     try {
       const { data: rows } = await supabase.from('rh_data').select('salarie_key,ndf').eq('mois','__heures__');
       if (rows) {
-        setHeures(prev => {
-          const m = { ...prev };
-          rows.forEach((r:any) => { m[r.salarie_key] = String(parseFloat(r.ndf)||0); });
-          return m;
-        });
+        const m: Record<string,string> = {};
+        rows.forEach((r:any) => { m[r.salarie_key] = r.ndf||'0'; });
+        setHeures(m);
       }
     } catch {}
+    setLoading(false);
   };
+
   const fetchNotes = async () => {
     try {
-      const { data: rows } = await supabase.from('rh_data').select('salarie_key, notes').eq('mois', '__notes__');
+      const { data: rows } = await supabase.from('rh_data').select('salarie_key,notes').eq('mois','__notes__');
       if (rows) {
         const m: Record<string,string> = {};
-        rows.forEach((r: any) => { if (r.notes) m[r.salarie_key] = r.notes; });
+        rows.forEach((r:any) => { if (r.notes) m[r.salarie_key] = r.notes; });
         setAllNotes(m);
       }
     } catch {}
   };
+
+  // Charger hSup depuis data quand data change
+  useEffect(() => {
+    if (data.length === 0) return;
+    const newHSup: Record<string, Record<string,string>> = {};
+    data.forEach(r => {
+      if (r.heures_sup && r.heures_sup !== '') {
+        if (!newHSup[r.salarie_key]) newHSup[r.salarie_key] = {};
+        newHSup[r.salarie_key][r.mois] = r.heures_sup;
+      }
+    });
+    setHSup(newHSup);
+  }, [data]);
 
   useEffect(() => {
     fetchCodes(); fetchData(); fetchHeures(); fetchNotes();
@@ -181,7 +205,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const getRow = (sal:string,mois:string) => data.find(r=>r.salarie_key===sal&&r.mois===mois);
   const totaux = FIELDS.reduce((acc,f)=>{
-    acc[f.key as string] = data.reduce((s,r)=>s+(parseFloat(r[f.key as keyof RhRow]||'0')||0),0);
+    acc[f.key as string] = data.reduce((s,r)=>s+(parseFloat((r[f.key as keyof RhRow] as string)||'0')||0),0);
     return acc;
   },{} as Record<string,number>);
 
@@ -198,6 +222,32 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     setTimeout(()=>setSavedAll(false),2000);
   };
 
+  const saveHSupForSal = async (sal: string) => {
+    setSavingHSup(p=>({...p,[sal]:true}));
+    setHSupColError('');
+    const moisData = hSup[sal] || {};
+    let hasError = false;
+    for (const [mois, val] of Object.entries(moisData)) {
+      if (!val || val.trim() === '') continue;
+      const { error } = await supabase.from('rh_data').upsert(
+        { salarie_key: sal, mois, heures_sup: val },
+        { onConflict: 'salarie_key,mois' }
+      );
+      if (error) {
+        if (error.message?.includes('heures_sup') || error.code === '42703') {
+          setHSupColError('⚠️ Colonne manquante. Exécutez dans Supabase SQL : ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_sup TEXT DEFAULT \'\';');
+          hasError = true;
+          break;
+        }
+      }
+    }
+    setSavingHSup(p=>({...p,[sal]:false}));
+    if (!hasError) {
+      setSavedHSup(p=>({...p,[sal]:true}));
+      setTimeout(()=>setSavedHSup(p=>({...p,[sal]:false})),2000);
+    }
+  };
+
   const TABS = [
     {id:'synthese' as Tab,label:'📊 Synthèse'},
     {id:'collabs' as Tab,label:'👥 Synthèse collabs'},
@@ -212,6 +262,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     .filter(s => !filterSociete || dynSocietes[s] === filterSociete)
     .filter(s => !searchQuery.trim() || s.toLowerCase().includes(searchQuery.toLowerCase()) || (dynSocietes[s]||'').toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredData = data.filter(r => !filterSociete && !searchQuery.trim() ? true : filteredSalaries.includes(r.salarie_key));
+  // Filtre mois pour onglet collabs
+  const filteredDataCollabs = filterMois ? filteredData.filter(r => r.mois === filterMois) : filteredData;
 
   return (
     <div className="min-h-screen bg-[#f0f4fa]">
@@ -299,7 +351,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 <div className="grid grid-cols-4 gap-2 sm:grid-cols-7 mb-6">
                   {FIELDS.map(f=>(
                     <div key={f.key} className={`${f.bg} rounded-2xl p-3 text-center`}>
-                      <p className={`text-lg font-bold ${f.color}`}>{totaux[f.key]>0?totaux[f.key].toFixed(2):'—'}</p>
+                      <p className={`text-lg font-bold ${f.color}`}>{totaux[f.key as string]>0?(totaux[f.key as string] as number).toFixed(2):'—'}</p>
                       <p className="text-xs font-medium opacity-70">{f.label}</p>
                       <p className="text-xs opacity-60">{f.unit}</p>
                     </div>
@@ -331,40 +383,56 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
             )}
 
-            {/* SYNTHÈSE COLLABS — sans Notes */}
+            {/* SYNTHÈSE COLLABS — avec filtre mois */}
             {tab==='collabs'&&(
-              <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-[#1F4E79] text-white">
-                      <th className="text-left px-3 py-3 font-medium">Salarié</th>
-                      <th className="px-2 py-3">Mois</th>
-                      <th className="px-2 py-3">Congés</th>
-                      <th className="px-2 py-3">Maladie</th>
-                      <th className="px-2 py-3">Transport</th>
-                      <th className="px-2 py-3">KM (km)</th>
-                      <th className="px-2 py-3">Frais pro</th>
-                      <th className="px-2 py-3">Régul</th>
-                      <th className="px-2 py-3">Primes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredData.length===0&&<tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
-                    {filteredData.map((row,i)=>(
-                      <tr key={i} className={i%2===0?'bg-white':'bg-blue-50/30'}>
-                        <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.salarie_key}</td>
-                        <td className="px-2 py-2 text-gray-600">{row.mois}</td>
-                        <td className="px-2 py-2 text-center">{row.conges||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.maladie||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.transport||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.ndf||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.frais_pro||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
-                        <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
+              <div>
+                {/* Filtre par mois */}
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Mois :</span>
+                  <button onClick={()=>setFilterMois(null)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterMois===null?'bg-[#1F4E79] text-white':'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                    Tous
+                  </button>
+                  {MOIS.map(m=>(
+                    <button key={m} onClick={()=>setFilterMois(m===filterMois?null:m)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${filterMois===m?'bg-[#1F4E79] text-white':'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                      {m.slice(0,3)}
+                    </button>
+                  ))}
+                </div>
+                <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-[#1F4E79] text-white">
+                        <th className="text-left px-3 py-3 font-medium">Salarié</th>
+                        <th className="px-2 py-3">Mois</th>
+                        <th className="px-2 py-3">Congés</th>
+                        <th className="px-2 py-3">Maladie</th>
+                        <th className="px-2 py-3">Transport</th>
+                        <th className="px-2 py-3">KM (km)</th>
+                        <th className="px-2 py-3">Frais pro</th>
+                        <th className="px-2 py-3">Régul</th>
+                        <th className="px-2 py-3">Primes</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredDataCollabs.length===0&&<tr><td colSpan={9} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
+                      {filteredDataCollabs.map((row,i)=>(
+                        <tr key={i} className={i%2===0?'bg-white':'bg-blue-50/30'}>
+                          <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.salarie_key}</td>
+                          <td className="px-2 py-2 text-gray-600">{row.mois}</td>
+                          <td className="px-2 py-2 text-center">{row.conges||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.maladie||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.transport||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.ndf||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.frais_pro||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
+                          <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
@@ -412,6 +480,68 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* ── HEURES SUPPLÉMENTAIRES À PAYER PAR MOIS ── */}
+                <div className="pt-2">
+                  <p className="text-xs font-bold text-amber-700 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span className="text-base">⏱</span> Heures supplémentaires à payer — par mois
+                  </p>
+                  {hSupColError && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 font-medium mb-3">
+                      {hSupColError}
+                    </div>
+                  )}
+                  <div className="bg-white rounded-2xl shadow-sm overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-[#1F4E79] text-white">
+                          <th className="text-left px-3 py-3 font-medium whitespace-nowrap">Collaborateur</th>
+                          {MOIS.map(m=><th key={m} className="px-1 py-3 font-medium whitespace-nowrap">{m.slice(0,3)}</th>)}
+                          <th className="px-3 py-3 font-medium text-center">Total</th>
+                          <th className="px-3 py-3 font-medium text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredSalaries.map((sal,i)=>{
+                          const salHSup = hSup[sal] || {};
+                          const total = MOIS.reduce((s,m)=>s+(parseFloat(salHSup[m]||'0')||0),0);
+                          return (
+                            <tr key={sal} className={i%2===0?'bg-white':'bg-amber-50/30'}>
+                              <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{sal}</td>
+                              {MOIS.map(mois=>(
+                                <td key={mois} className="px-1 py-1 text-center">
+                                  <input
+                                    type="text"
+                                    value={salHSup[mois]||''}
+                                    onChange={e=>{
+                                      const val = e.target.value;
+                                      setHSup(prev=>({
+                                        ...prev,
+                                        [sal]: { ...(prev[sal]||{}), [mois]: val }
+                                      }));
+                                    }}
+                                    className="w-16 text-center px-1 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-amber-400 bg-[#f0f4fa]"
+                                  />
+                                </td>
+                              ))}
+                              <td className="px-3 py-2 text-center font-bold text-amber-700">
+                                {total > 0 ? total.toFixed(1) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button
+                                  onClick={()=>saveHSupForSal(sal)}
+                                  disabled={savingHSup[sal]}
+                                  className={`flex items-center gap-1 mx-auto px-3 py-1.5 rounded-xl text-xs font-semibold transition-all disabled:opacity-60 ${savedHSup[sal]?'bg-green-100 text-green-600':savingHSup[sal]?'bg-amber-100 text-amber-500':'bg-amber-100 text-amber-700 hover:bg-amber-200'}`}>
+                                  💾 {savingHSup[sal]?'…':savedHSup[sal]?'Sauvé !':'Sauver'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             )}
