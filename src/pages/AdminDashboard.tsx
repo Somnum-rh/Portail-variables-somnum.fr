@@ -69,6 +69,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [editError, setEditError] = useState('');
   const [addError, setAddError] = useState('');
 
+  // États édition inline Synthèse collabs
+  const [editingRow, setEditingRow] = useState<{sal:string;mois:string}|null>(null);
+  const [editRowData, setEditRowData] = useState<Record<string,string>>({});
+  const [savingRow, setSavingRow] = useState(false);
+  const [savedRow, setSavedRow] = useState(false);
+
   const fetchCodes = async () => {
     const { data: rows } = await supabase.from('rh_codes').select('salarie_key, code, societe');
     if (rows && rows.length > 0) {
@@ -204,6 +210,30 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   const getRow = (sal:string,mois:string) => data.find(r=>r.salarie_key===sal&&r.mois===mois);
+
+  const ROW_FIELDS = ['conges','maladie','transport','ndf','frais_pro','regule','primes','heures_sup'] as const;
+
+  const startEditRow = (row: RhRow) => {
+    setEditingRow({sal: row.salarie_key, mois: row.mois});
+    setEditRowData({ conges:row.conges||'', maladie:row.maladie||'', transport:row.transport||'', ndf:row.ndf||'', frais_pro:row.frais_pro||'', regule:row.regule||'', primes:row.primes||'', heures_sup:row.heures_sup||'' });
+    setSavedRow(false);
+  };
+
+  const saveEditRow = async () => {
+    if (!editingRow) return;
+    setSavingRow(true);
+    const { error } = await supabase.from('rh_data').upsert(
+      { salarie_key: editingRow.sal, mois: editingRow.mois, ...editRowData },
+      { onConflict: 'salarie_key,mois' }
+    );
+    setSavingRow(false);
+    if (!error) {
+      setSavedRow(true);
+      setData(prev => prev.map(r => r.salarie_key===editingRow.sal && r.mois===editingRow.mois ? {...r, ...editRowData} : r));
+      setTimeout(() => { setSavedRow(false); setEditingRow(null); }, 1200);
+    }
+  };
+
   const totaux = FIELDS.reduce((acc,f)=>{
     acc[f.key as string] = data.reduce((s,r)=>s+(parseFloat((r[f.key as keyof RhRow] as string)||'0')||0),0);
     return acc;
@@ -361,8 +391,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                           <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{sal}</td>
                           {MOIS.map(mois=>{
                             const row=getRow(sal,mois);
-                            const has=row&&FIELDS.some(f=>row[f.key as keyof RhRow]&&row[f.key as keyof RhRow]!=='0');
-                            return <td key={mois} className="px-2 py-2 text-center">{has?<span className="inline-block w-2 h-2 rounded-full bg-green-400"/>:<span className="inline-block w-2 h-2 rounded-full bg-gray-200"/>}</td>;
+                            const has=row&&FIELDS.some(f=>row[f.key as keyof RhRow]&&row[f.key as keyof RhRow]!==''&&row[f.key as keyof RhRow]!=='0');
+                            return <td key={mois} className="px-1 py-2 text-center">
+                              {has
+                                ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-green-400 shadow-sm" title={`${sal} — ${mois} : données saisies`}><span className="w-2 h-2 rounded-full bg-green-600"/></span>
+                                : <span className="inline-block w-5 h-5 rounded-full bg-gray-100 border border-gray-200"/>}
+                            </td>;
                           })}
                         </tr>
                       ))}
@@ -403,24 +437,53 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <th className="px-2 py-3">Régul</th>
                         <th className="px-2 py-3">Primes</th>
                         <th className="px-2 py-3">HS à payer</th>
+                        <th className="px-2 py-3">✏️</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredDataCollabs.length===0&&<tr><td colSpan={10} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
-                      {filteredDataCollabs.map((row,i)=>(
+                      {filteredDataCollabs.length===0&&<tr><td colSpan={11} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
+                      {filteredDataCollabs.map((row,i)=>{
+                        const isEditing = editingRow?.sal===row.salarie_key && editingRow?.mois===row.mois;
+                        const inp = "w-14 px-1 py-1 bg-blue-50 border border-[#1F4E79]/30 rounded text-center text-xs focus:outline-none focus:border-[#1F4E79]";
+                        return (
                         <tr key={i} className={i%2===0?'bg-white':'bg-blue-50/30'}>
                           <td className="px-3 py-2 font-medium text-gray-700 whitespace-nowrap">{row.salarie_key}</td>
-                          <td className="px-2 py-2 text-gray-600">{row.mois}</td>
-                          <td className="px-2 py-2 text-center">{row.conges||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.maladie||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.transport||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.ndf||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.frais_pro||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
-                          <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
-                          <td className="px-2 py-2 text-center text-amber-700 font-medium">{row.heures_sup||'—'}</td>
+                          <td className="px-2 py-2 text-gray-600 whitespace-nowrap">{row.mois}</td>
+                          {isEditing ? (
+                            <>
+                              {ROW_FIELDS.map(f=>(
+                                <td key={f} className="px-1 py-1 text-center">
+                                  <input type="text" value={editRowData[f]||''} onChange={e=>setEditRowData(p=>({...p,[f]:e.target.value}))} className={inp}/>
+                                </td>
+                              ))}
+                              <td className="px-2 py-1 text-center whitespace-nowrap">
+                                <button onClick={saveEditRow} disabled={savingRow}
+                                  className={`px-3 py-1 rounded-lg text-xs font-semibold mr-1 transition-all ${savedRow?'bg-green-500 text-white':'bg-[#1F4E79] text-white hover:bg-[#163d61]'} disabled:opacity-50`}>
+                                  {savingRow?'…':savedRow?'✓':'OK'}
+                                </button>
+                                <button onClick={()=>setEditingRow(null)} className="px-2 py-1 rounded-lg text-xs bg-gray-100 text-gray-500 hover:bg-gray-200">✕</button>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-2 py-2 text-center">{row.conges||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.maladie||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.transport||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.ndf||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.frais_pro||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
+                              <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
+                              <td className="px-2 py-2 text-center text-amber-700 font-medium">{row.heures_sup||'—'}</td>
+                              <td className="px-2 py-2 text-center">
+                                <button onClick={()=>startEditRow(row)} className="p-1 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-[#1F4E79] transition-all" title="Modifier cette ligne">
+                                  <Pencil size={12}/>
+                                </button>
+                              </td>
+                            </>
+                          )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
