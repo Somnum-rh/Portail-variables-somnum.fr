@@ -4,17 +4,18 @@ import { LogOut, Clock, ChevronDown, ChevronUp, MessageSquare, Send } from 'luci
 
 interface SalarieDashboardProps { nom: string; onLogout: () => void; }
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
-interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup:string; }
-const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'', heures_sup:'' };
+interface VarsData { conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup:string; heures_rcr:string; }
+const EMPTY: VarsData = { conges:'',maladie:'',transport:'',ndf:'',frais_pro:'',regule:'',primes:'', heures_sup:'', heures_rcr:'' };
 const FIELDS: {key:keyof VarsData;label:string;unit:string;color:string;bg:string}[] = [
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-600',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-600',bg:'bg-orange-100'},
-  {key:'transport',label:'Transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
+  {key:'transport',label:'Abonnement transport',unit:'€',color:'text-green-600',bg:'bg-green-100'},
   {key:'ndf',label:'KM',unit:'km',color:'text-cyan-600',bg:'bg-cyan-100'},
   {key:'frais_pro',label:'Frais pro',unit:'',color:'text-purple-600',bg:'bg-purple-100'},
-  {key:'regule',label:'Régul avance',unit:'',color:'text-pink-600',bg:'bg-pink-100'},
+  {key:'regule',label:'Régul avance de frais',unit:'',color:'text-pink-600',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-600',bg:'bg-emerald-100'},
   {key:'heures_sup',label:'HS à payer',unit:'h',color:'text-amber-600',bg:'bg-amber-100'},
+  {key:'heures_rcr',label:'H. à ajouter au RCR',unit:'h',color:'text-violet-600',bg:'bg-violet-100'},
 ];
 
 export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProps) {
@@ -47,6 +48,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
             regule:r.regule||'',
             primes:r.primes||'',
             heures_sup:r.heures_sup||'',
+            heures_rcr:r.heures_rcr||'',
           };
         });
         setAllData(d);
@@ -87,7 +89,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
     setSaving(p=>({...p,[mois]:true})); setSaveError(p=>({...p,[mois]:''}) );
     const d = getData(mois);
     const { error } = await supabase.from('rh_data').upsert(
-      { salarie_key: nom, mois, conges: d.conges, maladie: d.maladie, transport: d.transport, ndf: d.ndf, frais_pro: d.frais_pro, regule: d.regule, primes: d.primes, heures_sup: d.heures_sup },
+      { salarie_key: nom, mois, conges: d.conges, maladie: d.maladie, transport: d.transport, ndf: d.ndf, frais_pro: d.frais_pro, regule: d.regule, primes: d.primes, heures_sup: d.heures_sup, heures_rcr: d.heures_rcr },
       { onConflict: 'salarie_key,mois' }
     );
     setSaving(p=>({...p,[mois]:false}));

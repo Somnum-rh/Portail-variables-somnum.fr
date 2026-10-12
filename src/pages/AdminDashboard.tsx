@@ -2,8 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPlus, Trash2, Copy, Pencil, Check, X, Search, Filter } from 'lucide-react';
 
-// SQL à exécuter dans Supabase pour activer les heures sup :
+// SQL à exécuter dans Supabase pour activer les heures sup et heures RCR :
 // ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_sup TEXT DEFAULT '';
+// ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_rcr TEXT DEFAULT '';
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -13,19 +14,20 @@ const SALARIE_CODES: Record<string,string> = {
 const SALARIES = Object.keys(SALARIE_CODES);
 const DEFAULT_CODES = { ...SALARIE_CODES };
 
-interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; }
+interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; heures_rcr?:string; }
 type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes';
 interface AdminDashboardProps { onLogout:()=>void; }
 
 const FIELDS: {key:keyof Omit<RhRow,'salarie_key'|'mois'>;label:string;unit:string;color:string;bg:string}[] = [
   {key:'conges',label:'Congés',unit:'j',color:'text-blue-700',bg:'bg-blue-100'},
   {key:'maladie',label:'Maladie',unit:'j',color:'text-orange-700',bg:'bg-orange-100'},
-  {key:'transport',label:'Transport',unit:'€',color:'text-green-700',bg:'bg-green-100'},
+  {key:'transport',label:'Abonnement transport',unit:'€',color:'text-green-700',bg:'bg-green-100'},
   {key:'ndf',label:'KM',unit:'km',color:'text-cyan-700',bg:'bg-cyan-100'},
   {key:'frais_pro',label:'Frais pro',unit:'€',color:'text-purple-700',bg:'bg-purple-100'},
-  {key:'regule',label:'Régul',unit:'€',color:'text-pink-700',bg:'bg-pink-100'},
+  {key:'regule',label:'Régul avance de frais',unit:'€',color:'text-pink-700',bg:'bg-pink-100'},
   {key:'primes',label:'Primes',unit:'€',color:'text-emerald-700',bg:'bg-emerald-100'},
-  {key:'heures_sup',label:'H.Sup',unit:'h',color:'text-amber-700',bg:'bg-amber-100'},
+  {key:'heures_sup',label:'HS à payer',unit:'h',color:'text-amber-700',bg:'bg-amber-100'},
+  {key:'heures_rcr',label:'H. à ajouter au RCR',unit:'h',color:'text-violet-700',bg:'bg-violet-100'},
 ];
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
@@ -211,11 +213,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const getRow = (sal:string,mois:string) => data.find(r=>r.salarie_key===sal&&r.mois===mois);
 
-  const ROW_FIELDS = ['conges','maladie','transport','ndf','frais_pro','regule','primes','heures_sup'] as const;
+  const ROW_FIELDS = ['conges','maladie','transport','ndf','frais_pro','regule','primes','heures_sup','heures_rcr'] as const;
 
   const startEditRow = (row: RhRow) => {
     setEditingRow({sal: row.salarie_key, mois: row.mois});
-    setEditRowData({ conges:row.conges||'', maladie:row.maladie||'', transport:row.transport||'', ndf:row.ndf||'', frais_pro:row.frais_pro||'', regule:row.regule||'', primes:row.primes||'', heures_sup:row.heures_sup||'' });
+    setEditRowData({ conges:row.conges||'', maladie:row.maladie||'', transport:row.transport||'', ndf:row.ndf||'', frais_pro:row.frais_pro||'', regule:row.regule||'', primes:row.primes||'', heures_sup:row.heures_sup||'', heures_rcr:row.heures_rcr||'' });
     setSavedRow(false);
   };
 
@@ -431,17 +433,18 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <th className="px-2 py-3">Mois</th>
                         <th className="px-2 py-3">Congés</th>
                         <th className="px-2 py-3">Maladie</th>
-                        <th className="px-2 py-3">Transport</th>
+                        <th className="px-2 py-3">Abonnement transport</th>
                         <th className="px-2 py-3">KM (km)</th>
                         <th className="px-2 py-3">Frais pro</th>
-                        <th className="px-2 py-3">Régul</th>
+                        <th className="px-2 py-3">Régul avance de frais</th>
                         <th className="px-2 py-3">Primes</th>
                         <th className="px-2 py-3">HS à payer</th>
+                        <th className="px-2 py-3">H. RCR</th>
                         <th className="px-2 py-3">✏️</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredDataCollabs.length===0&&<tr><td colSpan={11} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
+                              {filteredDataCollabs.length===0&&<tr><td colSpan={12} className="text-center py-8 text-gray-400">Aucune donnée saisie</td></tr>}
                       {filteredDataCollabs.map((row,i)=>{
                         const isEditing = editingRow?.sal===row.salarie_key && editingRow?.mois===row.mois;
                         const inp = "w-14 px-1 py-1 bg-blue-50 border border-[#1F4E79]/30 rounded text-center text-xs focus:outline-none focus:border-[#1F4E79]";
@@ -474,6 +477,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                               <td className="px-2 py-2 text-center">{row.regule||'—'}</td>
                               <td className="px-2 py-2 text-center">{row.primes||'—'}</td>
                               <td className="px-2 py-2 text-center text-amber-700 font-medium">{row.heures_sup||'—'}</td>
+                              <td className="px-2 py-2 text-center text-violet-700 font-medium">{row.heures_rcr||'—'}</td>
                               <td className="px-2 py-2 text-center">
                                 <button onClick={()=>startEditRow(row)} className="p-1 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-[#1F4E79] transition-all" title="Modifier cette ligne">
                                   <Pencil size={12}/>
