@@ -5,6 +5,8 @@ import { Users, LogOut, AlertTriangle, CheckCircle, Clock, MessageSquare, UserPl
 // SQL à exécuter dans Supabase pour activer les heures sup et heures RCR :
 // ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_sup TEXT DEFAULT '';
 // ALTER TABLE rh_data ADD COLUMN IF NOT EXISTS heures_rcr TEXT DEFAULT '';
+// SQL pour les labels personnalisés :
+// CREATE TABLE IF NOT EXISTS rh_config (key TEXT PRIMARY KEY, value TEXT);
 
 const MOIS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
@@ -15,7 +17,7 @@ const SALARIES = Object.keys(SALARIE_CODES);
 const DEFAULT_CODES = { ...SALARIE_CODES };
 
 interface RhRow { salarie_key:string; mois:string; conges:string; maladie:string; transport:string; ndf:string; frais_pro:string; regule:string; primes:string; heures_sup?:string; heures_rcr?:string; }
-type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes';
+type Tab = 'synthese'|'collabs'|'compteurs'|'codes'|'notes'|'labels';
 interface AdminDashboardProps { onLogout:()=>void; }
 
 const FIELDS: {key:keyof Omit<RhRow,'salarie_key'|'mois'>;label:string;unit:string;color:string;bg:string}[] = [
@@ -70,6 +72,35 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
   const [editError, setEditError] = useState('');
   const [addError, setAddError] = useState('');
+
+  // Labels personnalisés
+  const DEFAULT_LABELS: Record<string,string> = Object.fromEntries(FIELDS.map(f=>[f.key,f.label]));
+  const [customLabels, setCustomLabels] = useState<Record<string,string>>({...DEFAULT_LABELS});
+  const [editLabels, setEditLabels] = useState<Record<string,string>>({...DEFAULT_LABELS});
+  const [savingLabels, setSavingLabels] = useState(false);
+  const [savedLabels, setSavedLabels] = useState(false);
+
+  const fetchLabels = async () => {
+    try {
+      const { data: rows } = await supabase.from('rh_config').select('key,value').like('key','label_%');
+      if (rows && rows.length > 0) {
+        const m: Record<string,string> = {};
+        rows.forEach((r:any) => { m[r.key.replace('label_','')] = r.value; });
+        setCustomLabels(prev=>({...DEFAULT_LABELS,...prev,...m}));
+        setEditLabels(prev=>({...DEFAULT_LABELS,...prev,...m}));
+      }
+    } catch {}
+  };
+
+  const saveLabels = async () => {
+    setSavingLabels(true);
+    const upserts = Object.entries(editLabels).map(([k,v])=>({key:'label_'+k, value:v}));
+    await supabase.from('rh_config').upsert(upserts, {onConflict:'key'});
+    setCustomLabels({...editLabels});
+    setSavingLabels(false);
+    setSavedLabels(true);
+    setTimeout(()=>setSavedLabels(false),2000);
+  };
 
   // États édition inline Synthèse collabs
   const [editingRow, setEditingRow] = useState<{sal:string;mois:string}|null>(null);
@@ -134,7 +165,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   }, [data]);
 
   useEffect(() => {
-    fetchCodes(); fetchData(); fetchHeures(); fetchNotes();
+    fetchCodes(); fetchData(); fetchHeures(); fetchNotes(); fetchLabels();
     const ch = supabase.channel('rh_admin')
       .on('postgres_changes',{event:'*',schema:'public',table:'rh_data'},()=>{fetchData();fetchHeures();fetchNotes();})
       .subscribe(s=>setRealtime(s==='SUBSCRIBED'));
@@ -275,6 +306,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
     {id:'compteurs' as Tab,label:'⏱ Compteurs'},
     {id:'codes' as Tab,label:'🔑 Gestion collabs'},
     {id:'notes' as Tab,label:'💬 Notes'},
+    {id:'labels' as Tab,label:'🏷️ Labels'},
   ];
 
   const societes = [...new Set(Object.values(dynSocietes).filter(Boolean))].sort();
@@ -373,7 +405,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   {FIELDS.map(f=>(
                     <div key={f.key} className={`${f.bg} rounded-2xl p-3 text-center`}>
                       <p className={`text-lg font-bold ${f.color}`}>{totaux[f.key as string]>0?(totaux[f.key as string] as number).toFixed(2):'—'}</p>
-                      <p className="text-xs font-medium opacity-70">{f.label}</p>
+                      <p className="text-xs font-medium opacity-70">{customLabels[f.key] ?? f.label}</p>
                       <p className="text-xs opacity-60">{f.unit}</p>
                     </div>
                   ))}
@@ -433,13 +465,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                         <th className="px-2 py-3">Mois</th>
                         <th className="px-2 py-3">Congés</th>
                         <th className="px-2 py-3">Maladie</th>
-                        <th className="px-2 py-3">Abonnement transport</th>
+                        <th className="px-2 py-3">{customLabels['transport'] ?? 'Abonnement transport'}</th>
                         <th className="px-2 py-3">KM (km)</th>
                         <th className="px-2 py-3">Frais pro</th>
-                        <th className="px-2 py-3">Régul avance de frais</th>
+                        <th className="px-2 py-3">{customLabels['regule'] ?? 'Régul avance de frais'}</th>
                         <th className="px-2 py-3">Primes</th>
-                        <th className="px-2 py-3">HS à payer</th>
-                        <th className="px-2 py-3">H. RCR</th>
+                        <th className="px-2 py-3">{customLabels['heures_sup'] ?? 'HS à payer'}</th>
+                        <th className="px-2 py-3">{customLabels['heures_rcr'] ?? 'H. RCR'}</th>
                         <th className="px-2 py-3">✏️</th>
                       </tr>
                     </thead>
@@ -761,6 +793,48 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
             )}
           </div>
+
+            {/* LABELS */}
+            {tab === 'labels' && (
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl shadow-sm p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-base">🏷️</span>
+                    <span className="font-bold text-gray-800 text-sm">Personnaliser les noms des colonnes</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-4">Ces noms s'affichent pour tous les salariés. Modifie-les et clique sur Enregistrer.</p>
+                  <div className="grid gap-3">
+                    {FIELDS.map(f => (
+                      <div key={f.key} className="flex items-center gap-3">
+                        <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${f.bg.replace('bg-','bg-').replace('100','400')}`} style={{background: undefined}}>
+                        </span>
+                        <span className="text-xs text-gray-400 w-36 shrink-0 font-mono">{f.key}</span>
+                        <input
+                          type="text"
+                          value={editLabels[f.key] ?? f.label}
+                          onChange={e => setEditLabels(prev => ({...prev, [f.key]: e.target.value}))}
+                          className="flex-1 px-3 py-2 bg-[#f0f4fa] border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-[#1F4E79]"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-3 mt-5">
+                    <button onClick={saveLabels} disabled={savingLabels}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all disabled:opacity-50 ${savedLabels?'bg-green-500 text-white':'bg-[#1F4E79] text-white hover:bg-[#163d61]'}`}>
+                      {savingLabels?'Enregistrement…':savedLabels?'✓ Enregistré !':'Enregistrer'}
+                    </button>
+                    <button onClick={()=>setEditLabels({...DEFAULT_LABELS})}
+                      className="px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all">
+                      Réinitialiser
+                    </button>
+                  </div>
+                </div>
+                <div className="bg-[#f0f4fa] rounded-2xl p-4">
+                  <p className="text-xs text-gray-500 font-medium mb-1">⚠️ Table Supabase requise</p>
+                  <code className="text-xs text-gray-600 bg-white px-3 py-2 rounded-xl block">CREATE TABLE IF NOT EXISTS rh_config (key TEXT PRIMARY KEY, value TEXT);</code>
+                </div>
+              </div>
+            )}
         </>
       )}
     </div>

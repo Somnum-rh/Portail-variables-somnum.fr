@@ -29,12 +29,33 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
   const [savingNote, setSavingNote] = useState(false);
   const [savedNote, setSavedNote] = useState(false);
 
+  // Labels personnalisés (chargés depuis Supabase)
+  const DEFAULT_LABELS: Record<string,string> = Object.fromEntries(FIELDS.map(f=>[f.key,f.label]));
+  const [customLabels, setCustomLabels] = useState<Record<string,string>>({...DEFAULT_LABELS});
+
+  const fetchLabels = async () => {
+    try {
+      const { data: rows } = await supabase.from('rh_config').select('key,value').like('key','label_%');
+      if (rows && rows.length > 0) {
+        const m: Record<string,string> = {};
+        rows.forEach((r:any) => { m[r.key.replace('label_','')] = r.value; });
+        setCustomLabels(prev=>({...prev,...m}));
+      }
+    } catch {}
+  };
+
   useEffect(() => {
     (async () => {
-      const [{ data: hData }, { data: rows }] = await Promise.all([
+      const [{ data: cfgRows }, { data: hData }, { data: rows }] = await Promise.all([
+        supabase.from('rh_config').select('key,value').like('key','label_%'),
         supabase.from('rh_data').select('ndf').eq('salarie_key',nom).eq('mois','__heures__').maybeSingle(),
         supabase.from('rh_data').select('*').eq('salarie_key',nom).neq('mois','__heures__'),
       ]);
+      if (cfgRows && cfgRows.length > 0) {
+        const m: Record<string,string> = {};
+        cfgRows.forEach((r:any) => { m[r.key.replace('label_','')] = r.value; });
+        setCustomLabels(prev=>({...prev,...m}));
+      }
       if (hData) setHeures(parseFloat(hData.ndf)||0);
       if (rows) {
         const d: Record<string,VarsData> = {};
@@ -63,7 +84,9 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
         const r=p.new??p.old; if(!r||r.salarie_key!==nom) return;
         if(r.mois==='__heures__') setHeures(parseFloat(r.ndf)||0);
         if(r.mois==='__notes__' && r.salarie_key===nom) setNote(r.notes||'');
-      }).subscribe();
+      })
+      .on('postgres_changes',{event:'*',schema:'public',table:'rh_config'},()=>{ fetchLabels(); })
+      .subscribe();
     return () => { supabase.removeChannel(ch); };
   },[nom]);
 
@@ -135,7 +158,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
             {FIELDS.map(f=>(
               <div key={f.key} className={`${f.bg} rounded-2xl p-3 text-center`}>
                 <p className={`text-base font-bold ${f.color}`}>{parseFloat(totaux[f.key]||'0')>0?parseFloat(totaux[f.key]).toFixed(2):'—'}</p>
-                <p className="text-xs font-medium opacity-70 leading-tight">{f.label}</p>
+                <p className="text-xs font-medium opacity-70 leading-tight">{customLabels[f.key] ?? f.label}</p>
                 <p className="text-xs opacity-50">{f.unit}</p>
               </div>
             ))}
@@ -167,7 +190,7 @@ export default function SalarieDashboard({ nom, onLogout }: SalarieDashboardProp
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                         {FIELDS.map(f=>(
                           <div key={f.key}>
-                            <label className={`block text-xs font-semibold mb-1 ${f.color} uppercase tracking-wide`}>{f.label} {f.unit&&<span className="font-normal opacity-60">({f.unit})</span>}</label>
+                            <label className={`block text-xs font-semibold mb-1 ${f.color} uppercase tracking-wide`}>{customLabels[f.key] ?? f.label} {f.unit&&<span className="font-normal opacity-60">({f.unit})</span>}</label>
                             <input
                               type="text"
                               value={(d[f.key] as string)||''}
